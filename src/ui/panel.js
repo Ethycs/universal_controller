@@ -126,7 +126,10 @@ export function createPanelHTML() {
               </div>
             </div>
             <div class="uc-btn-grid" style="margin-top: 8px;">
-              <button class="uc-btn success" id="btn-save-sig">\u{1F4BE} Save Signature</button>
+              <button class="uc-btn success" id="btn-save-sig">\u{1F4BE} Save Sig</button>
+              <button class="uc-btn primary" id="btn-copy-llm">\u{1F4CB} Copy for LLM</button>
+              <button class="uc-btn" id="btn-verify">\u{2705} Verify</button>
+              <button class="uc-btn" id="btn-heap-scan">\u{1F9E0} Heap Scan</button>
               <button class="uc-btn" id="btn-unbind-all">\u{1F5D1}\u{FE0F} Unbind All</button>
               <button class="uc-btn" id="btn-refresh-bindings">\u{1F504} Refresh</button>
             </div>

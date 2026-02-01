@@ -11,6 +11,9 @@ import { PassiveDetector } from '../core/passive-detector.js';
 import { FrameDiscovery } from '../iframe/frame-discovery.js';
 import { FrameAgentManager } from '../iframe/frame-agent.js';
 import { FrameRPCParent, isInIframe } from '../iframe/frame-rpc.js';
+import { extractLLMContext, generateCopyContext } from '../llm/context-extractor.js';
+import { PatternVerifier } from '../llm/state-machine.js';
+import { fullHeapScan } from '../llm/heap-scanner.js';
 
 import { setText, submitInput } from '../actions/text-input.js';
 import { chatSend, chatGetMessages, chatOnMessage } from '../actions/chat-api.js';
@@ -732,6 +735,79 @@ export class UniversalController {
       rpcFrames: this.frameRPC?.knownFrames.size || 0,
       isChild: this.isChild
     };
+  }
+
+  // ============================================
+  // LLM INTEGRATION
+  // ============================================
+
+  /**
+   * Generate LLM context for a bound pattern.
+   * Packages element HTML, attributes, evidence, and framework info
+   * into a formatted prompt string suitable for Claude/ChatGPT.
+   *
+   * @param {string} patternName - The pattern to generate context for.
+   * @returns {string|null} The formatted context, or null if not bound.
+   */
+  getLLMContext(patternName) {
+    const api = this.boundAPIs.get(patternName);
+    if (!api) {
+      this.log('error', `Cannot generate LLM context: ${patternName} not bound`);
+      return null;
+    }
+
+    return extractLLMContext({
+      el: api.el,
+      patternName,
+      evidence: api.evidence,
+      components: api.components,
+      path: api.path
+    });
+  }
+
+  /**
+   * Generate LLM context from a detection result (not yet bound).
+   *
+   * @param {object} detectionResult - A result from detect().
+   * @returns {string}
+   */
+  getLLMContextForResult(detectionResult) {
+    return generateCopyContext(detectionResult, this);
+  }
+
+  /**
+   * Create a verifier for a bound pattern to test behavioral guarantees.
+   *
+   * @param {string} patternName
+   * @returns {PatternVerifier|null}
+   */
+  createVerifier(patternName) {
+    const api = this.boundAPIs.get(patternName);
+    if (!api) {
+      this.log('error', `Cannot create verifier: ${patternName} not bound`);
+      return null;
+    }
+
+    const verifier = new PatternVerifier(
+      patternName,
+      api.components,
+      (type, msg) => this.log(type, msg)
+    );
+
+    this.log('info', `Verifier created for ${patternName}`);
+    return verifier;
+  }
+
+  /**
+   * Run a full heap scan for framework detection and state extraction.
+   *
+   * @param {HTMLElement} [targetEl] - Optional element to extract framework state for.
+   * @returns {object}
+   */
+  heapScan(targetEl) {
+    const result = fullHeapScan(targetEl);
+    this.log('info', `Heap scan: ${result.framework.framework} ${result.framework.version || ''}, ${result.globals.length} globals found`);
+    return result;
   }
 
   // ============================================

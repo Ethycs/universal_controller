@@ -196,6 +196,74 @@ export function setupEventHandlers(panel, controller) {
     refreshSignatures();
   });
 
+  // --- Copy for LLM ---
+  panel.querySelector('#btn-copy-llm').addEventListener('click', () => {
+    const apis = controller.listBoundAPIs();
+    if (apis.length === 0) {
+      controller.log('warn', 'No bound APIs. Bind a pattern first.');
+      return;
+    }
+    // Generate context for the first bound pattern
+    const context = controller.getLLMContext(apis[0].pattern);
+    if (context) {
+      navigator.clipboard.writeText(context).then(() => {
+        controller.log('success', `LLM context for ${apis[0].pattern} copied to clipboard`);
+      }).catch(() => {
+        // Fallback: show in console output
+        panel.querySelector('#uc-api-output').textContent = context;
+        controller.log('info', 'Clipboard unavailable - context shown in console output');
+      });
+    }
+  });
+
+  // --- Verify ---
+  panel.querySelector('#btn-verify').addEventListener('click', async () => {
+    const apis = controller.listBoundAPIs();
+    if (apis.length === 0) {
+      controller.log('warn', 'No bound APIs to verify');
+      return;
+    }
+    const pattern = apis[0].pattern;
+    const verifier = controller.createVerifier(pattern);
+    if (!verifier) return;
+
+    const api = controller.getAPI(pattern);
+    const output = panel.querySelector('#uc-api-output');
+    output.textContent = `Verifying ${pattern}...\nPerform an action (e.g., send a message) to test.`;
+
+    // For chat, auto-verify send
+    if (pattern === 'chat' && api) {
+      const result = await verifier.verify('send', () => api.send('UC verification test'));
+      output.textContent = `Verification: ${result.passed ? 'PASSED' : 'FAILED'}\nGuarantee: ${result.guarantee}\n\n` +
+        result.results.map(r => `${r.passed ? '\u2705' : '\u274C'} [${r.phase}] ${r.desc}`).join('\n');
+    } else {
+      output.textContent = `Verifier created for ${pattern}.\nUse console: UniversalController.createVerifier('${pattern}')`;
+    }
+  });
+
+  // --- Heap Scan ---
+  panel.querySelector('#btn-heap-scan').addEventListener('click', () => {
+    const apis = controller.listBoundAPIs();
+    const targetEl = apis.length > 0 ? controller.getAPI(apis[0].pattern)?.el : null;
+    const result = controller.heapScan(targetEl);
+    const output = panel.querySelector('#uc-api-output');
+
+    let text = `Framework: ${result.framework.framework} ${result.framework.version || ''}\n`;
+    text += `Globals: ${result.globals.length} interesting objects found\n`;
+    if (result.globals.length > 0) {
+      text += result.globals.map(g => `  ${g.name} (${g.type})`).join('\n') + '\n';
+    }
+    if (result.elementState) {
+      text += `\nElement state (${result.elementState.framework}):\n`;
+      text += `  Component: ${result.elementState.type || 'N/A'}\n`;
+      if (result.elementState.hooks?.length > 0) {
+        text += `  Hooks: ${result.elementState.hooks.length} found\n`;
+      }
+    }
+    output.textContent = text;
+    currentTab = switchTab('api', panel);
+  });
+
   // --- Unbind / Refresh ---
   panel.querySelector('#btn-unbind-all').addEventListener('click', () => {
     controller.unbindAll();
