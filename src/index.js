@@ -137,6 +137,8 @@ GM_registerMenuCommand('Next Scan + Auto-Detect', () => {
   controller.nextScan();
   controller.autoDetect();
 });
+GM_registerMenuCommand('Auto-Bind (Saved)', () => controller.autoBind());
+GM_registerMenuCommand('Toggle Passive Mode', () => controller.togglePassive());
 
 // ============================================
 // INITIALIZE
@@ -145,3 +147,13 @@ GM_registerMenuCommand('Next Scan + Auto-Detect', () => {
 createUI();
 controller.log('info', 'Universal Controller v2 loaded');
 controller.log('info', `Page: ${location.hostname}`);
+
+// Attempt auto-bind from saved signatures after a short delay
+// (allows page to finish rendering dynamic content)
+setTimeout(() => {
+  const bound = controller.autoBind();
+  if (bound.length > 0) {
+    controller.log('success', `Auto-bound from saved signatures: ${bound.join(', ')}`);
+    if (uiState) uiState.refreshStats();
+  }
+}, 2000);

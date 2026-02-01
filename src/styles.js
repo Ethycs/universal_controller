@@ -551,4 +551,104 @@ export const STYLES = `
       color: #606078;
       text-transform: uppercase;
     }
+
+    .uc-toggle-row {
+      padding: 8px 0;
+      border-bottom: 1px solid #1a1a25;
+    }
+
+    .uc-toggle-row:last-child { border-bottom: none; }
+
+    .uc-toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .uc-toggle-label input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 36px;
+      height: 20px;
+      background: #2a2a3a;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .uc-toggle-label input[type="checkbox"]::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: #606078;
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .uc-toggle-label input[type="checkbox"]:checked {
+      background: rgba(0, 212, 255, 0.3);
+    }
+
+    .uc-toggle-label input[type="checkbox"]:checked::after {
+      transform: translateX(16px);
+      background: #00d4ff;
+    }
+
+    .uc-sig-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #1a1a25;
+      font-size: 11px;
+    }
+
+    .uc-sig-item:last-child { border-bottom: none; }
+
+    .uc-sig-pattern {
+      font-weight: 600;
+      color: #00d4ff;
+    }
+
+    .uc-sig-site {
+      color: #a855f7;
+      font-size: 10px;
+    }
+
+    .uc-sig-meta {
+      color: #606078;
+      font-size: 9px;
+      margin-top: 2px;
+    }
+
+    .uc-sig-actions {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .uc-sig-actions button {
+      padding: 2px 6px;
+      font-size: 9px;
+      background: #1a1a25;
+      border: 1px solid #2a2a3a;
+      border-radius: 3px;
+      color: #9090a8;
+      cursor: pointer;
+    }
+
+    .uc-sig-actions button:hover {
+      background: #2a2a3a;
+      color: #e8e8f0;
+    }
+
+    .uc-sig-actions button.danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      color: #ef4444;
+    }
 `;

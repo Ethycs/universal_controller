@@ -5,13 +5,16 @@
  * to the panel DOM elements, connecting them to the controller and renderers.
  */
 
-import { renderDiff, renderResults, renderBoundAPIs, updateStats } from './renderers.js';
+import {
+  renderDiff, renderResults, renderBoundAPIs, updateStats,
+  renderSignatures, renderPassiveResults
+} from './renderers.js';
 import { executeAPI } from './api-console.js';
 
 /**
  * Switch the active tab in the panel.
  *
- * @param {string} tabName - One of 'scan', 'detect', 'api', 'log'.
+ * @param {string} tabName - One of 'scan', 'detect', 'api', 'settings', 'log'.
  * @param {HTMLElement} panel - The #uc-panel element.
  * @returns {string} The new active tab name.
  */
@@ -28,20 +31,9 @@ export function switchTab(tabName, panel) {
 /**
  * Attach all event handlers for the panel.
  *
- * This wires up:
- *  - Tab switching
- *  - Pattern selector
- *  - Scan buttons (first scan, next scan, auto-detect)
- *  - Detect buttons (detect, detect all, signatures)
- *  - API quick-action buttons (chat send, form fill, dropdown toggle, modal close)
- *  - Unbind/refresh bindings buttons
- *  - API console input
- *  - Log callback
- *
  * @param {HTMLElement} panel - The #uc-panel element.
  * @param {object} controller - The UniversalController instance.
- * @returns {object} An object with state accessors and helpers:
- *   { getSelectedPattern, getDetectionResults, getCurrentTab, refreshStats }
+ * @returns {object} An object with state accessors and helpers.
  */
 export function setupEventHandlers(panel, controller) {
   let selectedPattern = 'chat';
@@ -68,10 +60,30 @@ export function setupEventHandlers(panel, controller) {
     }
   }
 
+  function refreshSignatures() {
+    const sigList = panel.querySelector('#uc-sig-list');
+    const sigCount = panel.querySelector('#sig-count');
+    if (sigList) {
+      renderSignatures(controller.signatures, sigList, sigCount);
+    }
+  }
+
+  function refreshPassive() {
+    const passiveList = panel.querySelector('#uc-passive-list');
+    if (passiveList) {
+      renderPassiveResults(controller.getPassiveResults(), passiveList);
+    }
+  }
+
   // --- Tabs ---
   panel.querySelectorAll('.uc-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       currentTab = switchTab(tab.dataset.tab, panel);
+      // Refresh tab-specific content
+      if (currentTab === 'settings') {
+        refreshSignatures();
+        refreshPassive();
+      }
     });
   });
 
@@ -168,6 +180,22 @@ export function setupEventHandlers(panel, controller) {
     else controller.log('warn', 'Bind modal API first');
   });
 
+  // --- Save Signature ---
+  panel.querySelector('#btn-save-sig').addEventListener('click', () => {
+    const apis = controller.listBoundAPIs();
+    if (apis.length === 0) {
+      controller.log('warn', 'No bound APIs to save signatures for');
+      return;
+    }
+    let saved = 0;
+    for (const { pattern } of apis) {
+      const sig = controller.saveSignature(pattern);
+      if (sig) saved++;
+    }
+    controller.log('success', `Saved ${saved} signature(s) for ${location.hostname}`);
+    refreshSignatures();
+  });
+
   // --- Unbind / Refresh ---
   panel.querySelector('#btn-unbind-all').addEventListener('click', () => {
     controller.unbindAll();
@@ -177,6 +205,49 @@ export function setupEventHandlers(panel, controller) {
   panel.querySelector('#btn-refresh-bindings').addEventListener('click', () => {
     renderBoundAPIs(controller.listBoundAPIs(), panel.querySelector('#bound-apis-list'), controller);
   });
+
+  // --- Settings: Auto-Bind toggle ---
+  const autoBindToggle = panel.querySelector('#uc-toggle-autobind');
+  if (autoBindToggle) {
+    autoBindToggle.checked = controller.autoBindEnabled;
+    autoBindToggle.addEventListener('change', () => {
+      controller.setAutoBind(autoBindToggle.checked);
+    });
+  }
+
+  // --- Settings: Passive Mode toggle ---
+  const passiveToggle = panel.querySelector('#uc-toggle-passive');
+  if (passiveToggle) {
+    passiveToggle.checked = controller.passive.enabled;
+    passiveToggle.addEventListener('change', () => {
+      controller.togglePassive();
+      const passiveList = panel.querySelector('#uc-passive-list');
+      if (passiveList) {
+        passiveList.dataset.active = String(controller.passive.enabled);
+        refreshPassive();
+      }
+    });
+
+    // Refresh passive results when new patterns are inferred
+    controller.passive.onPattern(() => {
+      if (currentTab === 'settings') refreshPassive();
+    });
+  }
+
+  // --- Settings: Signature management ---
+  const clearSigsBtn = panel.querySelector('#btn-clear-sigs');
+  if (clearSigsBtn) {
+    clearSigsBtn.addEventListener('click', () => {
+      controller.signatures.clearAll();
+      refreshSignatures();
+      controller.log('info', 'All signatures cleared');
+    });
+  }
+
+  const refreshSigsBtn = panel.querySelector('#btn-refresh-sigs');
+  if (refreshSigsBtn) {
+    refreshSigsBtn.addEventListener('click', refreshSignatures);
+  }
 
   // --- API console ---
   panel.querySelector('#uc-api-input').addEventListener('keypress', (e) => {
@@ -217,6 +288,8 @@ export function setupEventHandlers(panel, controller) {
     getSelectedPattern() { return selectedPattern; },
     getDetectionResults() { return detectionResults; },
     getCurrentTab() { return currentTab; },
-    refreshStats
+    refreshStats,
+    refreshSignatures,
+    refreshPassive
   };
 }

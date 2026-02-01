@@ -15,6 +15,7 @@ export function createPanelHTML() {
         <button class="uc-tab active" data-tab="scan">Scan</button>
         <button class="uc-tab" data-tab="detect">Detect</button>
         <button class="uc-tab" data-tab="api">API</button>
+        <button class="uc-tab" data-tab="settings">\u{2699}\u{FE0F}</button>
         <button class="uc-tab" data-tab="log">Log</button>
       </div>
       <div id="uc-body">
@@ -125,8 +126,9 @@ export function createPanelHTML() {
               </div>
             </div>
             <div class="uc-btn-grid" style="margin-top: 8px;">
+              <button class="uc-btn success" id="btn-save-sig">\u{1F4BE} Save Signature</button>
               <button class="uc-btn" id="btn-unbind-all">\u{1F5D1}\u{FE0F} Unbind All</button>
-              <button class="uc-btn" id="btn-refresh-bindings">\u{1F504} Refresh List</button>
+              <button class="uc-btn" id="btn-refresh-bindings">\u{1F504} Refresh</button>
             </div>
           </div>
 
@@ -140,6 +142,47 @@ export function createPanelHTML() {
 //   UC.form.fill({email: '...'})
 //   UniversalController.unbindAll()
 //   UniversalController.listBoundAPIs()</div>
+          </div>
+        </div>
+
+        <!-- SETTINGS TAB -->
+        <div class="uc-tab-content" data-tab="settings">
+          <div class="uc-section">
+            <div class="uc-section-title">Features</div>
+            <div class="uc-toggle-row">
+              <label class="uc-toggle-label">
+                <input type="checkbox" id="uc-toggle-autobind" checked>
+                <span>Auto-Bind on page load</span>
+              </label>
+            </div>
+            <div class="uc-toggle-row">
+              <label class="uc-toggle-label">
+                <input type="checkbox" id="uc-toggle-passive">
+                <span>Passive Observation</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="uc-section">
+            <div class="uc-section-title">Saved Signatures <span class="uc-badge" id="sig-count">0</span></div>
+            <div id="uc-sig-list" class="uc-results" style="max-height: 200px;">
+              <div style="color: #606078; text-align: center; padding: 10px; font-size: 11px;">
+                No saved signatures
+              </div>
+            </div>
+            <div class="uc-btn-grid" style="margin-top: 8px;">
+              <button class="uc-btn" id="btn-clear-sigs">\u{1F5D1}\u{FE0F} Clear All Sigs</button>
+              <button class="uc-btn" id="btn-refresh-sigs">\u{1F504} Refresh</button>
+            </div>
+          </div>
+
+          <div class="uc-section">
+            <div class="uc-section-title">Passive Detections</div>
+            <div id="uc-passive-list" class="uc-results" style="max-height: 150px;">
+              <div style="color: #606078; text-align: center; padding: 10px; font-size: 11px;">
+                Enable passive mode to detect patterns automatically
+              </div>
+            </div>
           </div>
         </div>
 

@@ -6,6 +6,8 @@ import { ValueScanner } from '../core/value-scanner.js';
 import { PhrasalScanner } from '../core/phrasal-scanner.js';
 import { DOMLocalityHash } from '../core/dom-locality-hash.js';
 import { getElementPath, resolveElement } from '../core/element-path.js';
+import { SignatureStore } from '../core/signature-store.js';
+import { PassiveDetector } from '../core/passive-detector.js';
 
 import { setText, submitInput } from '../actions/text-input.js';
 import { chatSend, chatGetMessages, chatOnMessage } from '../actions/chat-api.js';
@@ -20,10 +22,33 @@ export class UniversalController {
     this.scanner = new ValueScanner();
     this.phrasal = new PhrasalScanner();
     this.lsh = new DOMLocalityHash();
+    this.signatures = new SignatureStore();
+    this.passive = new PassiveDetector();
     this.detected = new Map();
     this.boundAPIs = new Map();
     this.logCallbacks = [];
     this.lastDiff = null;
+    this.autoBindEnabled = true;
+
+    // Wire passive detector logging through our log system
+    this.passive.onLog((type, msg) => this.log(type, msg));
+
+    // When passive detection infers a pattern, register it in detected map
+    this.passive.onPattern((inferred) => {
+      if (inferred.container) {
+        const path = this.getPath(inferred.container);
+        const components = this.findComponents(inferred.container, inferred.pattern);
+        // Merge any extra components from passive detection
+        if (inferred.input) components.input = inferred.input;
+        if (inferred.trigger) components.trigger = inferred.trigger;
+        this.detected.set(path, {
+          patternName: inferred.pattern,
+          components,
+          el: inferred.container,
+          source: 'passive'
+        });
+      }
+    });
   }
 
   onLog(cb) { this.logCallbacks.push(cb); }
@@ -411,6 +436,163 @@ export class UniversalController {
   }
 
   // ============================================
+  // SIGNATURE PERSISTENCE
+  // ============================================
+
+  /**
+   * Save a signature for a confirmed-working binding.
+   * Call this after the user confirms the binding works correctly.
+   *
+   * @param {string} patternName - The pattern to save a signature for.
+   * @param {object} [sendMethodResult] - Result from the last setText call.
+   * @returns {object|null} The captured signature, or null if not bound.
+   */
+  saveSignature(patternName, sendMethodResult) {
+    const api = this.boundAPIs.get(patternName);
+    if (!api) {
+      this.log('error', `Cannot save signature: ${patternName} not bound`);
+      return null;
+    }
+
+    const lshSig = this.lsh.signature(api.el);
+
+    // Also add to the LSH index for cross-site similarity matching
+    this.lsh.addToIndex(
+      `${location.hostname}:${patternName}`,
+      lshSig,
+      { patternName, hostname: location.hostname }
+    );
+
+    const sig = this.signatures.capture({
+      patternName,
+      components: api.components,
+      lshSignature: lshSig,
+      sendMethodResult,
+      diffEvidence: this.lastDiff?.summary || null,
+      path: api.path
+    });
+
+    this.log('success', `Signature saved for ${patternName} on ${location.hostname}`);
+    return sig;
+  }
+
+  /**
+   * Attempt to auto-bind patterns using saved signatures for the current site.
+   * Runs detection for each saved pattern and binds the best match.
+   *
+   * @returns {Array<string>} List of pattern names that were auto-bound.
+   */
+  autoBind() {
+    if (!this.autoBindEnabled) {
+      this.log('info', 'Auto-bind is disabled');
+      return [];
+    }
+
+    const savedSigs = this.signatures.getForCurrentSite();
+    if (savedSigs.length === 0) {
+      this.log('info', `No saved signatures for ${location.hostname}`);
+      return [];
+    }
+
+    this.log('info', `Found ${savedSigs.length} saved signature(s) for ${location.hostname}`);
+    const bound = [];
+
+    for (const sig of savedSigs) {
+      try {
+        // Try to detect the pattern using normal detection
+        const results = this.detect(sig.patternName, 'STRUCTURAL');
+
+        if (results.length > 0) {
+          // If we have the LSH fingerprint, try to match by similarity
+          let bestMatch = results[0];
+
+          if (sig.structural?.minhashArray) {
+            const savedMinhash = new Uint32Array(sig.structural.minhashArray);
+            let bestSimilarity = 0;
+
+            for (const result of results) {
+              const candidateSig = this.lsh.signature(result.el);
+              const sim = this.lsh.similarity(
+                { minhash: savedMinhash },
+                candidateSig
+              );
+              if (sim > bestSimilarity) {
+                bestSimilarity = sim;
+                bestMatch = result;
+              }
+            }
+          }
+
+          // Bind the best match
+          const api = this.bind(sig.patternName, bestMatch.path);
+          if (api) {
+            this.signatures.markUsed(sig.id);
+            bound.push(sig.patternName);
+            this.log('success', `Auto-bound ${sig.patternName} (saved signature)`);
+          }
+        }
+      } catch (e) {
+        this.log('warn', `Auto-bind failed for ${sig.patternName}: ${e.message}`);
+      }
+    }
+
+    return bound;
+  }
+
+  /**
+   * Toggle auto-bind feature.
+   *
+   * @param {boolean} enabled
+   */
+  setAutoBind(enabled) {
+    this.autoBindEnabled = enabled;
+    this.log('info', `Auto-bind ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  // ============================================
+  // PASSIVE OBSERVATION
+  // ============================================
+
+  /**
+   * Start passive observation mode.
+   * Captures user interactions and correlates with DOM mutations
+   * to infer UI patterns without manual scanning.
+   */
+  startPassive() {
+    this.passive.start();
+  }
+
+  /**
+   * Stop passive observation mode.
+   */
+  stopPassive() {
+    this.passive.stop();
+  }
+
+  /**
+   * Toggle passive observation mode.
+   *
+   * @returns {boolean} New enabled state.
+   */
+  togglePassive() {
+    if (this.passive.enabled) {
+      this.stopPassive();
+    } else {
+      this.startPassive();
+    }
+    return this.passive.enabled;
+  }
+
+  /**
+   * Get passively inferred patterns.
+   *
+   * @returns {Array<object>}
+   */
+  getPassiveResults() {
+    return this.passive.getInferred();
+  }
+
+  // ============================================
   // UTILITIES
   // ============================================
 
@@ -457,7 +639,8 @@ export class UniversalController {
       snapshots: this.scanner.snapshotCount,
       elements: this.scanner.elementCount,
       detected: this.detected.size,
-      bound: this.boundAPIs.size
+      bound: this.boundAPIs.size,
+      signatures: this.signatures.count
     };
   }
 }

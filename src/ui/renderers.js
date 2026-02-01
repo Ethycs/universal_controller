@@ -194,6 +194,96 @@ export function renderBoundAPIs(apis, container, controller) {
   });
 }
 
+// ---- Render: Saved Signatures ----
+
+/**
+ * Render the signature manager list.
+ *
+ * @param {object} sigStore - The SignatureStore instance.
+ * @param {HTMLElement} container - The #uc-sig-list element.
+ * @param {HTMLElement} countBadge - The #sig-count badge element.
+ */
+export function renderSignatures(sigStore, container, countBadge) {
+  const allSigs = sigStore.getAll();
+  const total = sigStore.count;
+
+  if (countBadge) countBadge.textContent = total;
+
+  if (total === 0) {
+    container.innerHTML = `
+      <div style="color: #606078; text-align: center; padding: 10px; font-size: 11px;">
+        No saved signatures
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+  for (const { hostname, signatures } of allSigs) {
+    for (const sig of signatures) {
+      const age = Date.now() - sig.createdAt;
+      const ageStr = age < 3600000 ? `${Math.round(age / 60000)}m ago` :
+                     age < 86400000 ? `${Math.round(age / 3600000)}h ago` :
+                     `${Math.round(age / 86400000)}d ago`;
+
+      html += `
+        <div class="uc-sig-item">
+          <div>
+            <span class="uc-sig-pattern">${getIcon(sig.patternName)} ${sig.patternName}</span>
+            <span class="uc-sig-site">${hostname}</span>
+          </div>
+          <div class="uc-sig-meta">
+            ${sig.framework} &middot; ${ageStr} &middot; used ${sig.useCount}x
+            ${sig.behavioral?.sendMethod ? `&middot; send: ${sig.behavioral.sendMethod}` : ''}
+          </div>
+          <div class="uc-sig-actions">
+            <button class="uc-sig-delete danger" data-sig-id="${sig.id}">\u{2715} Delete</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  container.innerHTML = html;
+
+  // Attach delete handlers
+  container.querySelectorAll('.uc-sig-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sigStore.delete(btn.dataset.sigId);
+      renderSignatures(sigStore, container, countBadge);
+    });
+  });
+}
+
+// ---- Render: Passive Detections ----
+
+/**
+ * Render passively inferred patterns.
+ *
+ * @param {Array<object>} inferred - Array from controller.getPassiveResults().
+ * @param {HTMLElement} container - The #uc-passive-list element.
+ */
+export function renderPassiveResults(inferred, container) {
+  if (!inferred || inferred.length === 0) {
+    container.innerHTML = `
+      <div style="color: #606078; text-align: center; padding: 10px; font-size: 11px;">
+        ${container.dataset.active === 'true' ? 'Observing... interact with the page' : 'Enable passive mode to detect patterns automatically'}
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = inferred.map(r => `
+    <div class="uc-result" style="padding: 8px;">
+      <div class="uc-result-header" style="margin-bottom: 4px;">
+        <span class="uc-result-type">${getIcon(r.pattern)} ${r.pattern.toUpperCase()}</span>
+        <span class="uc-result-confidence ${getConfClass(r.confidence)}">${(r.confidence * 100).toFixed(0)}%</span>
+      </div>
+      <div style="font-size: 10px; color: #9090a8;">${r.evidence}</div>
+    </div>
+  `).join('');
+}
+
 // ---- Update Stats ----
 
 /**
