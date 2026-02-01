@@ -184,7 +184,10 @@ export function setupEventHandlers(panel, controller) {
       const input = panel.querySelector('#uc-api-input');
       const output = panel.querySelector('#uc-api-output');
       const result = executeAPI(input.value, controller);
-      if (result) {
+      if (result && typeof result.then === 'function') {
+        output.textContent = 'Awaiting...';
+        result.then(r => { output.textContent = r.output; });
+      } else if (result) {
         output.textContent = result.output;
       }
     }

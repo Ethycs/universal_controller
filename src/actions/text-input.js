@@ -3,32 +3,60 @@
 // ============================================
 
 /**
- * Sets text on an input element using multiple strategies for maximum compatibility.
- * Tries paste simulation first, then execCommand, then direct value setting with events.
+ * Sets text on an input/textarea element using multiple strategies.
+ * Order: native setter + InputEvent (React/Vue) → execCommand → paste simulation.
+ * Each attempt is verified before trying the next fallback.
  *
  * @param {HTMLElement} input - The input, textarea, or contenteditable element.
  * @param {string} text - The text to set.
- * @returns {boolean} True if the input was non-null and the operation was attempted.
+ * @returns {{ success: boolean, method: string }}
  */
 export function setText(input, text) {
-  if (!input) return false;
+  if (!input) return { success: false, method: 'none' };
+
+  // Route contenteditable elements to dedicated handler
+  if (input.contentEditable === 'true' && !('value' in input)) {
+    return setContentEditable(input, text);
+  }
 
   input.focus();
 
-  // Clear existing content
-  if (input.select) {
-    input.select();
-  } else if (input.contentEditable === 'true') {
-    // contenteditable
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  // Method 1: Paste simulation (most universal)
+  // Method 1: Native setter + InputEvent (works on React/Vue/Angular)
   try {
+    const proto = input.tagName === 'TEXTAREA'
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter) {
+      setter.call(input, text);
+    } else {
+      input.value = text;
+    }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    if (input.value === text) {
+      return { success: true, method: 'nativeSetter' };
+    }
+  } catch (e) {}
+
+  // Method 2: execCommand('insertText')
+  try {
+    input.focus();
+    input.select();
+    document.execCommand('selectAll', false, null);
+    document.execCommand('insertText', false, text);
+
+    if (input.value === text) {
+      return { success: true, method: 'execCommand' };
+    }
+  } catch (e) {}
+
+  // Method 3: Paste simulation (may be restricted by CSP)
+  try {
+    input.focus();
+    if (input.select) input.select();
+
     const dt = new DataTransfer();
     dt.setData('text/plain', text);
     const pasteEvent = new ClipboardEvent('paste', {
@@ -37,33 +65,47 @@ export function setText(input, text) {
       clipboardData: dt
     });
     input.dispatchEvent(pasteEvent);
-  } catch (e) {
-    // DataTransfer not supported in some contexts
-  }
 
-  // Verify or fallback to execCommand
-  const currentValue = input.value ?? input.textContent;
-  if (currentValue !== text) {
-    document.execCommand('selectAll', false, null);
-    document.execCommand('insertText', false, text);
-  }
-
-  // Final fallback: direct set + events
-  const finalValue = input.value ?? input.textContent;
-  if (finalValue !== text) {
-    if ('value' in input) {
-      const setter = Object.getOwnPropertyDescriptor(
-        input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
-        'value'
-      )?.set;
-      setter?.call(input, text) || (input.value = text);
-    } else {
-      input.textContent = text;
+    if (input.value === text) {
+      return { success: true, method: 'paste' };
     }
-    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-  }
+  } catch (e) {}
 
-  return true;
+  // Final fallback: brute-force value assignment
+  input.value = text;
+  input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+  return { success: input.value === text, method: 'directAssign' };
+}
+
+/**
+ * Sets text on a contenteditable element using dedicated strategies.
+ *
+ * @param {HTMLElement} el - The contenteditable element.
+ * @param {string} text - The text to set.
+ * @returns {{ success: boolean, method: string }}
+ */
+function setContentEditable(el, text) {
+  el.focus();
+
+  // Select all existing content
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  // Method 1: execCommand (preserves undo history, fires input events)
+  try {
+    document.execCommand('insertText', false, text);
+    if (el.textContent.trim() === text.trim()) {
+      return { success: true, method: 'execCommand' };
+    }
+  } catch (e) {}
+
+  // Method 2: Direct textContent assignment
+  el.textContent = text;
+  el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+  return { success: el.textContent.trim() === text.trim(), method: 'directTextContent' };
 }
 
 /**

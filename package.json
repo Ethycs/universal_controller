@@ -1,6 +1,6 @@
 {
   "name": "universal-controller",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cheat Engine-style DOM scanner with LSH + phrasal detection for universal UI API binding",
   "type": "module",
   "scripts": {

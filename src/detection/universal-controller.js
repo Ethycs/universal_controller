@@ -5,6 +5,7 @@
 import { ValueScanner } from '../core/value-scanner.js';
 import { PhrasalScanner } from '../core/phrasal-scanner.js';
 import { DOMLocalityHash } from '../core/dom-locality-hash.js';
+import { getElementPath, resolveElement } from '../core/element-path.js';
 
 import { setText, submitInput } from '../actions/text-input.js';
 import { chatSend, chatGetMessages, chatOnMessage } from '../actions/chat-api.js';
@@ -419,13 +420,11 @@ export class UniversalController {
   }
 
   getPath(el) {
-    const parts = [];
-    while (el && el !== document.body && el.parentElement) {
-      const idx = [...el.parentElement.children].indexOf(el);
-      parts.unshift(`${el.tagName}[${idx}]`);
-      el = el.parentElement;
-    }
-    return parts.join('>');
+    return getElementPath(el);
+  }
+
+  resolveElement(path) {
+    return resolveElement(path);
   }
 
   getAllSignatures() {

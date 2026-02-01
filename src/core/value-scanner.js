@@ -6,6 +6,8 @@
  * pattern detectors for chat, form, dropdown, and modal UI patterns.
  */
 
+import { getElementPath, resolveElement } from './element-path.js';
+
 export class ValueScanner {
   constructor() {
     this.snapshots = [];
@@ -20,7 +22,7 @@ export class ValueScanner {
 
     document.querySelectorAll('*').forEach(el => {
       try {
-        const path = this.getPath(el);
+        const path = getElementPath(el);
         const values = this.extractValues(el);
 
         if (Object.keys(values).length > 0) {
@@ -364,13 +366,11 @@ export class ValueScanner {
   }
 
   getPath(el) {
-    const parts = [];
-    while (el && el !== document.body && el.parentElement) {
-      const idx = [...el.parentElement.children].indexOf(el);
-      parts.unshift(`${el.tagName}[${idx}]`);
-      el = el.parentElement;
-    }
-    return parts.join('>');
+    return getElementPath(el);
+  }
+
+  resolveElement(path) {
+    return resolveElement(path);
   }
 
   get snapshotCount() {
