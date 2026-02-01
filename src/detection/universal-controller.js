@@ -8,6 +8,9 @@ import { DOMLocalityHash } from '../core/dom-locality-hash.js';
 import { getElementPath, resolveElement } from '../core/element-path.js';
 import { SignatureStore } from '../core/signature-store.js';
 import { PassiveDetector } from '../core/passive-detector.js';
+import { FrameDiscovery } from '../iframe/frame-discovery.js';
+import { FrameAgentManager } from '../iframe/frame-agent.js';
+import { FrameRPCParent, isInIframe } from '../iframe/frame-rpc.js';
 
 import { setText, submitInput } from '../actions/text-input.js';
 import { chatSend, chatGetMessages, chatOnMessage } from '../actions/chat-api.js';
@@ -24,6 +27,10 @@ export class UniversalController {
     this.lsh = new DOMLocalityHash();
     this.signatures = new SignatureStore();
     this.passive = new PassiveDetector();
+    this.frameDiscovery = new FrameDiscovery();
+    this.frameAgents = new FrameAgentManager((type, msg) => this.log(type, msg));
+    this.frameRPC = isInIframe() ? null : new FrameRPCParent((type, msg) => this.log(type, msg));
+    this.isChild = isInIframe();
     this.detected = new Map();
     this.boundAPIs = new Map();
     this.logCallbacks = [];
@@ -593,6 +600,141 @@ export class UniversalController {
   }
 
   // ============================================
+  // CROSS-IFRAME SUPPORT
+  // ============================================
+
+  /**
+   * Start frame discovery and create agents for same-origin iframes.
+   * Also pings cross-origin iframes for UC instances via RPC.
+   *
+   * @returns {Promise<{ sameOrigin: number, crossOrigin: number, rpcActive: number }>}
+   */
+  async startFrameScanning() {
+    if (this.isChild) {
+      this.log('info', 'Running as child frame, skipping frame scanning');
+      return { sameOrigin: 0, crossOrigin: 0, rpcActive: 0 };
+    }
+
+    // Discover all iframes
+    const frames = this.frameDiscovery.start();
+    this.log('info', `Discovered ${frames.length} iframe(s)`);
+
+    // Create agents for accessible (same-origin) frames
+    let sameOrigin = 0;
+    for (const { iframe, info } of frames) {
+      if (info.accessible && info.hasContent) {
+        const agent = this.frameAgents.createAgent(iframe);
+        if (agent) sameOrigin++;
+      }
+    }
+
+    // Watch for new iframes and auto-create agents
+    this.frameDiscovery.onFrame(({ iframe, info }) => {
+      this.log('info', `New iframe detected: ${info.src || 'about:blank'} (${info.sameOrigin ? 'same-origin' : 'cross-origin'})`);
+      if (info.accessible && info.hasContent) {
+        this.frameAgents.createAgent(iframe);
+      }
+    });
+
+    // Ping cross-origin frames for UC instances
+    let rpcActive = 0;
+    if (this.frameRPC) {
+      const crossOriginFrames = this.frameDiscovery.getCrossOrigin();
+      for (const { iframe } of crossOriginFrames) {
+        try {
+          const hasUC = await this.frameRPC.ping(iframe.contentWindow);
+          if (hasUC) {
+            rpcActive++;
+            this.log('success', `UC found in cross-origin iframe: ${iframe.src}`);
+          }
+        } catch (e) {}
+      }
+    }
+
+    const crossOrigin = this.frameDiscovery.getCrossOrigin().length;
+    this.log('info', `Frames: ${sameOrigin} same-origin agents, ${crossOrigin} cross-origin, ${rpcActive} with UC`);
+
+    return { sameOrigin, crossOrigin, rpcActive };
+  }
+
+  /**
+   * Stop frame scanning and clean up.
+   */
+  stopFrameScanning() {
+    this.frameDiscovery.stop();
+  }
+
+  /**
+   * Run detection across all frames (main page + iframes).
+   *
+   * @param {string} patternName
+   * @param {string} [guarantee='BEHAVIORAL']
+   * @returns {Promise<Array<object>>} Combined results from all frames.
+   */
+  async detectAcrossFrames(patternName, guarantee = 'BEHAVIORAL') {
+    // Detect in main page
+    const mainResults = this.detect(patternName, guarantee);
+
+    // Detect in same-origin iframe agents
+    const iframeResults = this.frameAgents.detectAll(patternName, PATTERNS);
+    for (const result of iframeResults) {
+      this.detected.set(result.path, {
+        patternName: result.patternName,
+        components: {},
+        el: result.el,
+        iframe: result.iframe,
+        source: 'iframe-agent'
+      });
+    }
+
+    // Detect in cross-origin frames via RPC
+    const rpcResults = [];
+    if (this.frameRPC) {
+      for (const win of this.frameRPC.knownFrames) {
+        try {
+          const results = await this.frameRPC.call(win, 'detect', [patternName, guarantee]);
+          if (Array.isArray(results)) {
+            for (const r of results) {
+              rpcResults.push({
+                ...r,
+                isIframe: true,
+                source: 'rpc'
+              });
+            }
+          }
+        } catch (e) {
+          this.log('warn', `RPC detect failed: ${e.message}`);
+        }
+      }
+    }
+
+    const allResults = [...mainResults, ...iframeResults, ...rpcResults];
+    allResults.sort((a, b) => b.confidence - a.confidence);
+
+    if (iframeResults.length > 0 || rpcResults.length > 0) {
+      this.log('info', `Cross-frame results: ${mainResults.length} main + ${iframeResults.length} iframe-agent + ${rpcResults.length} RPC`);
+    }
+
+    return allResults;
+  }
+
+  /**
+   * Get info about discovered frames.
+   *
+   * @returns {object}
+   */
+  getFrameInfo() {
+    return {
+      total: this.frameDiscovery.getAll().length,
+      accessible: this.frameDiscovery.getAccessible().length,
+      crossOrigin: this.frameDiscovery.getCrossOrigin().length,
+      agents: this.frameAgents.count,
+      rpcFrames: this.frameRPC?.knownFrames.size || 0,
+      isChild: this.isChild
+    };
+  }
+
+  // ============================================
   // UTILITIES
   // ============================================
 
@@ -640,7 +782,8 @@ export class UniversalController {
       elements: this.scanner.elementCount,
       detected: this.detected.size,
       bound: this.boundAPIs.size,
-      signatures: this.signatures.count
+      signatures: this.signatures.count,
+      frames: this.frameAgents.count
     };
   }
 }

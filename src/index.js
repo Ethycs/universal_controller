@@ -17,6 +17,7 @@
 
 import { STYLES } from './styles.js';
 import { UniversalController } from './detection/universal-controller.js';
+import { FrameRPCChild, isInIframe } from './iframe/frame-rpc.js';
 import { createPanelHTML } from './ui/panel.js';
 import { setupEventHandlers, switchTab } from './ui/tabs.js';
 
@@ -144,16 +145,30 @@ GM_registerMenuCommand('Toggle Passive Mode', () => controller.togglePassive());
 // INITIALIZE
 // ============================================
 
-createUI();
-controller.log('info', 'Universal Controller v2 loaded');
-controller.log('info', `Page: ${location.hostname}`);
+// If running inside an iframe, set up child RPC handler (no UI)
+if (isInIframe()) {
+  const childRPC = new FrameRPCChild(controller);
+  controller.log('info', `Universal Controller v2 loaded (child frame: ${location.hostname})`);
+} else {
+  // Full UI only in the top-level window
+  createUI();
+  controller.log('info', 'Universal Controller v2 loaded');
+  controller.log('info', `Page: ${location.hostname}`);
 
-// Attempt auto-bind from saved signatures after a short delay
-// (allows page to finish rendering dynamic content)
-setTimeout(() => {
-  const bound = controller.autoBind();
-  if (bound.length > 0) {
-    controller.log('success', `Auto-bound from saved signatures: ${bound.join(', ')}`);
-    if (uiState) uiState.refreshStats();
-  }
-}, 2000);
+  // Attempt auto-bind from saved signatures after a short delay
+  // (allows page to finish rendering dynamic content)
+  setTimeout(() => {
+    const bound = controller.autoBind();
+    if (bound.length > 0) {
+      controller.log('success', `Auto-bound from saved signatures: ${bound.join(', ')}`);
+      if (uiState) uiState.refreshStats();
+    }
+
+    // Start frame scanning in the background
+    controller.startFrameScanning().then(info => {
+      if (info.sameOrigin > 0 || info.rpcActive > 0) {
+        controller.log('info', `Frame scanning: ${info.sameOrigin} agents, ${info.rpcActive} RPC frames`);
+      }
+    });
+  }, 2000);
+}
