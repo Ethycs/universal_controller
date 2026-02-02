@@ -180,6 +180,40 @@ export function setupEventHandlers(panel, controller) {
     else controller.log('warn', 'Bind modal API first');
   });
 
+  // --- Capture Send Button ---
+  panel.querySelector('#btn-capture-send').addEventListener('click', async () => {
+    const apis = controller.listBoundAPIs();
+    if (apis.length === 0) {
+      controller.log('warn', 'Bind a pattern first, then capture its send button');
+      return;
+    }
+    const pattern = apis[0].pattern;
+    controller.log('info', 'Click the SEND button on the page (Esc to cancel)');
+
+    // Minimize panel so user can see the page
+    const panelEl = document.getElementById('uc-panel');
+    panelEl.style.opacity = '0.3';
+    panelEl.style.pointerEvents = 'none';
+
+    // Scope the capture to the detected container's region
+    const api = controller.getAPI(pattern);
+    const scope = api?.components?.input || api?.el || null;
+
+    const el = await controller.captureClick('Click the send/submit button...', {
+      scope,
+      patternName: pattern,
+      componentKey: 'sendButton'
+    });
+
+    panelEl.style.opacity = '';
+    panelEl.style.pointerEvents = '';
+
+    if (el) {
+      controller.log('success', `Send button captured for ${pattern}`);
+      refreshStats();
+    }
+  });
+
   // --- Save Signature ---
   panel.querySelector('#btn-save-sig').addEventListener('click', () => {
     const apis = controller.listBoundAPIs();

@@ -932,6 +932,104 @@ export class UniversalController {
   }
 
   // ============================================
+  // INTERACTIVE CAPTURE
+  // ============================================
+
+  /**
+   * Capture a user click to identify a component element (e.g. send button).
+   * Only listens within the given scope element (and its ancestors up to body).
+   * Adds hover highlighting, intercepts the next click, then cleans up.
+   *
+   * @param {string} promptMsg - Message shown in the log.
+   * @param {object} [options]
+   * @param {HTMLElement} [options.scope] - Only accept clicks inside this element (or nearby).
+   * @param {number} [options.timeout=15000] - Auto-cancel after ms.
+   * @param {string} [options.patternName] - If provided, updates the bound API's components.
+   * @param {string} [options.componentKey] - The component key to set (e.g. 'sendButton').
+   * @returns {Promise<HTMLElement|null>} The clicked element, or null if cancelled/timed out.
+   */
+  captureClick(promptMsg, options = {}) {
+    const timeout = options.timeout || 15000;
+    // Scope: the container region where clicks are valid.
+    // Walk up a few levels from the scope element to include sibling controls (e.g. send button).
+    const rawScope = options.scope;
+    const scope = rawScope
+      ? (rawScope.closest('fieldset') || rawScope.parentElement?.parentElement?.parentElement?.parentElement || rawScope)
+      : null;
+
+    this.log('info', promptMsg);
+    if (scope) {
+      this.highlight(scope, timeout);
+    }
+
+    return new Promise((resolve) => {
+      let lastHovered = null;
+
+      const isInScope = (el) => {
+        if (!scope) return true; // no scope = accept anywhere
+        return scope.contains(el);
+      };
+
+      const onMove = (e) => {
+        if (this._isOwnElement(e.target)) return;
+        if (!isInScope(e.target)) return;
+        if (lastHovered) lastHovered.classList.remove('uc-highlight');
+        lastHovered = e.target;
+        lastHovered.classList.add('uc-highlight');
+      };
+
+      const cleanup = () => {
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('click', onClick, true);
+        document.removeEventListener('keydown', onEsc, true);
+        if (lastHovered) lastHovered.classList.remove('uc-highlight');
+        if (scope) scope.classList.remove('uc-highlight');
+        clearTimeout(timer);
+      };
+
+      const onClick = (e) => {
+        if (this._isOwnElement(e.target)) return;
+        if (!isInScope(e.target)) return; // ignore clicks outside scope
+        e.preventDefault();
+        e.stopPropagation();
+        cleanup();
+
+        const el = e.target;
+        this.log('success', `Captured: <${el.tagName.toLowerCase()}> ${el.ariaLabel || el.textContent?.slice(0, 30) || ''}`);
+
+        // If a bound API pattern was specified, update its components
+        if (options.patternName && options.componentKey) {
+          const api = this.boundAPIs.get(options.patternName);
+          if (api) {
+            api.components[options.componentKey] = el;
+            this.log('info', `Updated ${options.patternName}.${options.componentKey}`);
+          }
+        }
+
+        resolve(el);
+      };
+
+      const onEsc = (e) => {
+        if (e.key === 'Escape') {
+          cleanup();
+          this.log('info', 'Capture cancelled');
+          resolve(null);
+        }
+      };
+
+      document.addEventListener('mousemove', onMove, { capture: true });
+      document.addEventListener('click', onClick, { capture: true });
+      document.addEventListener('keydown', onEsc, { capture: true });
+
+      const timer = setTimeout(() => {
+        cleanup();
+        this.log('warn', 'Capture timed out');
+        resolve(null);
+      }, timeout);
+    });
+  }
+
+  // ============================================
   // UTILITIES
   // ============================================
 

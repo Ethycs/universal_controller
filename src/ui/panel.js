@@ -126,6 +126,7 @@ export function createPanelHTML() {
               </div>
             </div>
             <div class="uc-btn-grid" style="margin-top: 8px;">
+              <button class="uc-btn warning" id="btn-capture-send">\u{1F3AF} Capture Send Btn</button>
               <button class="uc-btn success" id="btn-save-sig">\u{1F4BE} Save Sig</button>
               <button class="uc-btn primary" id="btn-copy-llm">\u{1F4CB} Copy for LLM</button>
               <button class="uc-btn" id="btn-verify">\u{2705} Verify</button>
