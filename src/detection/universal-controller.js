@@ -15,7 +15,7 @@ import { extractLLMContext, generateCopyContext } from '../llm/context-extractor
 import { PatternVerifier } from '../llm/state-machine.js';
 import { fullHeapScan } from '../llm/heap-scanner.js';
 
-import { setText, submitInput } from '../actions/text-input.js';
+import { setText } from '../actions/text-input.js';
 import { chatSend, chatGetMessages, chatOnMessage } from '../actions/chat-api.js';
 import { formFill, formSubmit, formGetValues } from '../actions/form-api.js';
 import { dropdownToggle, dropdownSelect } from '../actions/dropdown-api.js';
@@ -24,12 +24,14 @@ import { modalClose } from '../actions/modal-api.js';
 import { PATTERNS } from './patterns.js';
 
 export class UniversalController {
-  constructor() {
-    this.scanner = new ValueScanner();
+  constructor(options = {}) {
+    this.nonceAttr = options.nonceAttr || 'data-uc-nonce';
+    this.nonce = options.nonce || null;
+    this.scanner = new ValueScanner({ nonceAttr: this.nonceAttr });
     this.phrasal = new PhrasalScanner();
     this.lsh = new DOMLocalityHash();
     this.signatures = new SignatureStore();
-    this.passive = new PassiveDetector();
+    this.passive = new PassiveDetector({ nonceAttr: this.nonceAttr });
     this.frameDiscovery = new FrameDiscovery();
     this.frameAgents = new FrameAgentManager((type, msg) => this.log(type, msg));
     this.frameRPC = isInIframe() ? null : new FrameRPCParent((type, msg) => this.log(type, msg));
@@ -181,6 +183,10 @@ export class UniversalController {
     return results;
   }
 
+  _isOwnElement(el) {
+    return el.closest(`[${this.nonceAttr}]`) !== null;
+  }
+
   scanStructural(patternName) {
     const candidates = [];
     const checked = new Set();
@@ -191,6 +197,7 @@ export class UniversalController {
     patternSelectors.forEach(selector => {
       try {
         document.querySelectorAll(selector).forEach(el => {
+          if (this._isOwnElement(el)) return;
           const path = this.getPath(el);
           if (checked.has(path)) return;
           checked.add(path);
@@ -206,6 +213,7 @@ export class UniversalController {
     // Also scan for repeated children (chat, feed)
     if (patternConfig?.scanRepeatedChildren) {
       document.querySelectorAll('*').forEach(el => {
+        if (this._isOwnElement(el)) return;
         if (this.hasRepeatedChildren(el)) {
           const path = this.getPath(el);
           if (checked.has(path)) return;
@@ -285,14 +293,127 @@ export class UniversalController {
     return semantics[patternName]?.() ? 1 : 0;
   }
 
+  /**
+   * Probe candidate input elements by writing a test string and verifying it appears.
+   * Returns the first candidate where setText succeeds, then cleans up.
+   * This is the Cheat Engine paradigm: try → verify → iterate.
+   *
+   * @param {Array<HTMLElement>} candidates
+   * @returns {{ input: HTMLElement, method: string }|null}
+   */
+  _probeInput(candidates) {
+    const probeText = `\u200B`; // zero-width space (invisible, minimal side-effects)
+
+    for (const c of candidates) {
+      // Skip inert / aria-hidden / our own elements
+      if (c.closest('[inert]') || c.closest('[aria-hidden="true"]') || this._isOwnElement(c)) continue;
+
+      // Snapshot the current value
+      const isContentEditable = c.contentEditable === 'true' && !('value' in c);
+      const before = isContentEditable ? c.textContent : c.value;
+
+      // Try setting probe text
+      const result = setText(c, probeText);
+
+      // Check: did the text actually land?
+      const after = isContentEditable ? c.textContent : c.value;
+      const probeWorked = after?.includes(probeText);
+
+      // Clean up: restore original value
+      if (isContentEditable) {
+        // Clear via selectAll + delete for contenteditable
+        try {
+          c.focus();
+          document.execCommand('selectAll', false, null);
+          document.execCommand('delete', false, null);
+        } catch (e) {
+          c.textContent = '';
+        }
+        c.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }));
+      } else {
+        setText(c, before || '');
+      }
+
+      if (probeWorked) {
+        this.log('info', `Probed input: ${c.tagName}${c.getAttribute('data-testid') ? '[' + c.getAttribute('data-testid') + ']' : ''} (${result.method})`);
+        return { input: c, method: result.method };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the send/submit button near a chat input, filtering out menu/toggle/upload buttons.
+   *
+   * @param {HTMLElement} input
+   * @param {HTMLElement} fallbackRoot
+   * @returns {HTMLElement|null}
+   */
+  _findChatSendButton(input, fallbackRoot) {
+    const roots = [
+      input?.closest('fieldset'),
+      input?.closest('[data-testid*="chat"]'),
+      input?.closest('[class*="chat"]'),
+      input?.closest('[class*="composer"]'),
+      input?.parentElement?.parentElement?.parentElement,
+      fallbackRoot,
+      document.body
+    ].filter(Boolean);
+
+    const selectors = [
+      'button[aria-label*="send" i]',
+      'button[aria-label*="submit" i]',
+      'button[data-testid*="send" i]',
+      'button[type="submit"]'
+    ];
+
+    for (const root of roots) {
+      for (const sel of selectors) {
+        const btn = root.querySelector(sel);
+        if (btn) return btn;
+      }
+    }
+
+    // Fallback: last non-menu button (send buttons typically appear at the end)
+    for (const root of roots) {
+      const btns = [...root.querySelectorAll('button')].filter(b =>
+        !b.getAttribute('aria-label')?.match(/toggle|menu|attach|upload|expand|close/i) &&
+        !b.getAttribute('aria-haspopup')
+      );
+      if (btns.length > 0) return btns[btns.length - 1];
+    }
+
+    return null;
+  }
+
   findComponents(el, patternName) {
     const finders = {
       chat: () => {
         const container = el;
-        const root = el.closest('[class*="chat"]') || el.parentElement || document.body;
-        let input = root.querySelector('input,textarea,[contenteditable="true"]');
-        if (!input) input = document.querySelector('[class*="chat"] input, [class*="chat"] textarea');
-        let sendButton = root.querySelector('button');
+        const root = el.closest('[class*="chat"]') || el.closest('[data-testid*="chat"]') || el.parentElement || document.body;
+
+        // Gather all candidate inputs from the vicinity and document-wide
+        const candidates = [
+          ...root.querySelectorAll('[contenteditable="true"][role="textbox"], [contenteditable="true"], textarea, input:not([type="hidden"]):not([type="file"])'),
+          ...document.querySelectorAll('[data-testid="chat-input"], [data-testid*="prompt"] [contenteditable="true"], [data-testid*="prompt"] textarea')
+        ];
+
+        // Probe: iterate candidates, try setText, verify text appears, clean up
+        const probed = this._probeInput(candidates);
+        let input = probed?.input || null;
+
+        // If probe failed, fall back to first interactive candidate
+        if (!input) {
+          for (const c of candidates) {
+            if (!c.closest('[inert]') && !c.closest('[aria-hidden="true"]') && !this._isOwnElement(c)) {
+              input = c;
+              break;
+            }
+          }
+        }
+
+        const sendButton = this._findChatSendButton(input, root);
         return { container, input, sendButton };
       },
       form: () => ({
@@ -834,6 +955,7 @@ export class UniversalController {
     ['[role]', '[aria-live]', 'form', 'input', 'button', '[class*="chat"]', '[class*="modal"]'].forEach(sel => {
       try {
         document.querySelectorAll(sel).forEach(el => {
+          if (this._isOwnElement(el)) return;
           const path = this.getPath(el);
           if (seen.has(path)) return;
           seen.add(path);

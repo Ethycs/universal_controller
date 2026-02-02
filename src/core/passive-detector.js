@@ -18,6 +18,7 @@ export class PassiveDetector {
 
     this.correlationWindow = options.correlationWindow || 1000; // ms
     this.minConfidence = options.minConfidence || 0.6;
+    this.nonceAttr = options.nonceAttr || 'data-uc-nonce';
 
     // Event queues for correlation
     this._actionQueue = [];   // user actions (clicks, inputs, scrolls)
@@ -100,7 +101,12 @@ export class PassiveDetector {
   // EVENT HANDLERS
   // ============================================
 
+  _isOwnElement(el) {
+    return el?.closest?.(`[${this.nonceAttr}]`) !== null;
+  }
+
   _handleClick(e) {
+    if (this._isOwnElement(e.target)) return;
     this._actionQueue.push({
       type: 'click',
       target: e.target,
@@ -116,6 +122,7 @@ export class PassiveDetector {
   }
 
   _handleInput(e) {
+    if (this._isOwnElement(e.target)) return;
     this._actionQueue.push({
       type: 'input',
       target: e.target,
@@ -132,6 +139,7 @@ export class PassiveDetector {
   _handleScroll(e) {
     const el = e.target === document ? document.scrollingElement : e.target;
     if (!el || el === document) return;
+    if (this._isOwnElement(el)) return;
 
     this._actionQueue.push({
       type: 'scroll',
@@ -148,6 +156,7 @@ export class PassiveDetector {
 
   _handleKeydown(e) {
     if (e.key !== 'Enter') return;
+    if (this._isOwnElement(e.target)) return;
 
     this._actionQueue.push({
       type: 'enter',
@@ -166,6 +175,7 @@ export class PassiveDetector {
     const now = Date.now();
 
     for (const m of mutations) {
+      if (this._isOwnElement(m.target)) continue;
       if (m.type === 'childList' && m.addedNodes.length > 0) {
         this._mutationQueue.push({
           type: 'children-added',

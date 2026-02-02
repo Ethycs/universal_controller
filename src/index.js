@@ -22,6 +22,16 @@ import { createPanelHTML } from './ui/panel.js';
 import { setupEventHandlers, switchTab } from './ui/tabs.js';
 
 // ============================================
+// SELF-DETECTION NONCE
+// ============================================
+// Random nonce stamped on all UC-injected DOM elements.
+// Scanners check for this attribute and skip matching elements
+// so the controller never detects its own panel as a UI pattern.
+
+const UC_NONCE = crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+const UC_ATTR = 'data-uc-nonce';
+
+// ============================================
 // INJECT STYLES
 // ============================================
 
@@ -55,7 +65,7 @@ function makeDraggable(el, handle) {
 // STATE
 // ============================================
 
-const controller = new UniversalController();
+const controller = new UniversalController({ nonce: UC_NONCE, nonceAttr: UC_ATTR });
 let panelVisible = false;
 let uiState = null; // set after event handlers are wired
 
@@ -78,6 +88,7 @@ function createUI() {
   // --- FAB button ---
   const fab = document.createElement('button');
   fab.id = 'uc-fab';
+  fab.setAttribute(UC_ATTR, UC_NONCE);
   fab.innerHTML = '\u26A1';
   fab.title = 'Universal Controller v2';
   fab.addEventListener('click', togglePanel);
@@ -86,6 +97,7 @@ function createUI() {
   // --- Panel ---
   const panel = document.createElement('div');
   panel.id = 'uc-panel';
+  panel.setAttribute(UC_ATTR, UC_NONCE);
   panel.innerHTML = createPanelHTML();
   document.body.appendChild(panel);
 

@@ -79,6 +79,7 @@ export function setText(input, text) {
 
 /**
  * Sets text on a contenteditable element using dedicated strategies.
+ * Handles ProseMirror, TipTap, Slate, and vanilla contenteditable.
  *
  * @param {HTMLElement} el - The contenteditable element.
  * @param {string} text - The text to set.
@@ -87,25 +88,68 @@ export function setText(input, text) {
 function setContentEditable(el, text) {
   el.focus();
 
-  // Select all existing content
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
+  const selectAll = () => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
 
-  // Method 1: execCommand (preserves undo history, fires input events)
+  const verify = () => el.textContent.trim() === text.trim();
+
+  // Method 1: execCommand (preserves undo history, works with most editors)
   try {
+    selectAll();
     document.execCommand('insertText', false, text);
-    if (el.textContent.trim() === text.trim()) {
-      return { success: true, method: 'execCommand' };
-    }
+    if (verify()) return { success: true, method: 'execCommand' };
   } catch (e) {}
 
-  // Method 2: Direct textContent assignment
+  // Method 2: InputEvent with insertReplacementText (ProseMirror/TipTap)
+  // Modern editors listen for beforeinput and handle it in their own transaction system.
+  try {
+    selectAll();
+    const beforeInput = new InputEvent('beforeinput', {
+      bubbles: true,
+      cancelable: true,
+      inputType: 'insertReplacementText',
+      data: text
+    });
+    el.dispatchEvent(beforeInput);
+    // Also fire the input event in case the editor expects both
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText', data: text }));
+    if (verify()) return { success: true, method: 'beforeInput' };
+  } catch (e) {}
+
+  // Method 3: Clipboard-based insertion (works when editors intercept paste)
+  try {
+    selectAll();
+    const dt = new DataTransfer();
+    dt.setData('text/plain', text);
+    const pasteEvent = new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: dt
+    });
+    el.dispatchEvent(pasteEvent);
+    if (verify()) return { success: true, method: 'paste' };
+  } catch (e) {}
+
+  // Method 4: Direct DOM manipulation (last resort, may break editor state)
+  // For ProseMirror: clear the editor node, insert a text node, fire input
+  try {
+    while (el.firstChild) el.removeChild(el.firstChild);
+    const p = document.createElement('p');
+    p.textContent = text;
+    el.appendChild(p);
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+    if (verify()) return { success: true, method: 'directDOM' };
+  } catch (e) {}
+
+  // Final fallback
   el.textContent = text;
   el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-  return { success: el.textContent.trim() === text.trim(), method: 'directTextContent' };
+  return { success: verify(), method: 'directTextContent' };
 }
 
 /**

@@ -9,9 +9,10 @@
 import { getElementPath, resolveElement } from './element-path.js';
 
 export class ValueScanner {
-  constructor() {
+  constructor(options = {}) {
     this.snapshots = [];
     this.watchlist = new Map();
+    this.nonceAttr = options.nonceAttr || 'data-uc-nonce';
   }
 
   snapshot() {
@@ -22,6 +23,7 @@ export class ValueScanner {
 
     document.querySelectorAll('*').forEach(el => {
       try {
+        if (el.closest(`[${this.nonceAttr}]`)) return;
         const path = getElementPath(el);
         const values = this.extractValues(el);
 
