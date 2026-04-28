@@ -1,0 +1,23 @@
+[project]
+name = "universal_controller"
+version = "1.0.0"
+description = "Controlled-browser engine + MV3 extension + ML classifier for UI detection. Reusable library for any Python project doing browser automation."
+readme = "README.md"
+license = { text = "ISC" }
+authors = [{ name = "Universal Controller" }]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/Ethycs/universal_controller"
+Repository = "https://github.com/Ethycs/universal_controller"
+
+[project.optional-dependencies]
+# Deps for scripts/ — training + benchmarking the DOM classifier.
+# UC doesn't ship a Python runtime; consumer projects supply Python via their
+# own env (e.g., pixi, venv, poetry). This declares what scripts/*.py expect.
+training = [
+    "scikit-learn>=1.3",
+    "joblib>=1.3",
+    "numpy>=1.24",
+    "playwright>=1.40",
+]

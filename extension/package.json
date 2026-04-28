@@ -1,0 +1,16 @@
+{
+  "name": "uc-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Universal Controller as a Chrome MV3 extension. Bundles the engine from ../src/ with GM_*/unsafeWindow shims; localStorage-backed storage adapter.",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c --watch"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-alias": "^5.1.1",
+    "rollup": "^4.57.1"
+  }
+}

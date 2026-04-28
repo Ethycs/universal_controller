@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Universal Controller (Dev)",
+  "description": "Full UC detection + actions exposed to Playwright via window.__UC. Tampermonkey build preserved in submodule.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/uc-extension.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  }
+}
