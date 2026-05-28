@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+tests/test_chatgpt.py
+uc_browser/__init__.py
+uc_browser/_paths.py
+uc_browser/browser.py
+uc_browser/chrome_cookies.py
+uc_browser/dom_classifier.py
+universal_controller.egg-info/PKG-INFO
+universal_controller.egg-info/SOURCES.txt
+universal_controller.egg-info/dependency_links.txt
+universal_controller.egg-info/requires.txt
+universal_controller.egg-info/top_level.txt

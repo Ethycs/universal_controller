@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "universal_controller"
 version = "1.0.0"
@@ -6,6 +10,12 @@ readme = "README.md"
 license = { text = "ISC" }
 authors = [{ name = "Universal Controller" }]
 requires-python = ">=3.10"
+dependencies = [
+    "playwright>=1.40",
+    "numpy>=1.24",
+    "scikit-learn>=1.3",
+    "joblib>=1.3",
+]
 
 [project.urls]
 Homepage = "https://github.com/Ethycs/universal_controller"
@@ -13,11 +23,22 @@ Repository = "https://github.com/Ethycs/universal_controller"
 
 [project.optional-dependencies]
 # Deps for scripts/ — training + benchmarking the DOM classifier.
-# UC doesn't ship a Python runtime; consumer projects supply Python via their
-# own env (e.g., pixi, venv, poetry). This declares what scripts/*.py expect.
 training = [
     "scikit-learn>=1.3",
     "joblib>=1.3",
     "numpy>=1.24",
     "playwright>=1.40",
 ]
+# Cookie extraction from installed Chrome (UCBrowser._inject_chrome_cookies).
+chrome-cookies = [
+    "rookiepy>=0.5",
+]
+# Anti-bot evasion plugin.
+stealth = [
+    "playwright-stealth>=2.0.2,<3",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["uc_browser*"]
+exclude = ["extension*", "models*", "scripts*", "ml*", "src*", "tests*"]
