@@ -98,6 +98,100 @@ _STATE_FILE = Path(
 )
 
 
+# ── Generic API shim ────────────────────────────────────────────────
+#
+# Installed via context.add_init_script so every page in every tab gets
+# ``window.__UC_apiShim`` available before any site JS runs.
+#
+# The point: when a site decorates its own ``fetch`` (rotating auth
+# tokens, CSRF headers, anti-bot signing, etc.), calling fetch from
+# *inside* the page picks up all of that for free. Site-specific Python
+# clients hand us a URL + JSON body; we POST it through the page's
+# context; the site's JS handles the rotating/signing automatically.
+#
+# Site recipes can also stream via ``__UC_apiShim.stream(url, opts, callbackName)``
+# — Playwright's ``page.expose_function()`` is the bridge that delivers
+# each chunk back to Python as the response arrives.
+
+_UC_API_SHIM_JS = r"""
+(() => {
+  if (window.__UC_apiShim) return;
+  window.__UC_apiShim = {
+    /**
+     * One-shot fetch via the page's own context.
+     * Returns {status, ok, headers, body}. body is text — caller parses.
+     */
+    async fetch(url, opts) {
+      opts = opts || {};
+      const init = {
+        method: opts.method || 'POST',
+        headers: Object.assign(
+          {'Content-Type': 'application/json'},
+          opts.headers || {}
+        ),
+        credentials: opts.credentials || 'include',
+      };
+      if (opts.body !== undefined) {
+        init.body = (typeof opts.body === 'string')
+          ? opts.body
+          : JSON.stringify(opts.body);
+      }
+      const r = await fetch(url, init);
+      let bodyText = '';
+      try { bodyText = await r.text(); } catch (e) { bodyText = '[body read failed]'; }
+      return {
+        status: r.status,
+        ok: r.ok,
+        headers: Object.fromEntries(r.headers),
+        body: bodyText,
+      };
+    },
+
+    /**
+     * Streaming fetch: invokes window[callbackName](chunkStr) for each
+     * decoded chunk as it arrives. The callback must be bound via
+     * Playwright's page.expose_function() before this is called.
+     * Returns {status, ok, headers} once the stream is fully drained.
+     */
+    async stream(url, opts, callbackName) {
+      opts = opts || {};
+      const cb = window[callbackName];
+      if (typeof cb !== 'function') {
+        throw new Error('__UC_apiShim.stream: callback not bound: ' + callbackName);
+      }
+      const init = {
+        method: opts.method || 'POST',
+        headers: Object.assign(
+          {'Content-Type': 'application/json'},
+          opts.headers || {}
+        ),
+        credentials: opts.credentials || 'include',
+      };
+      if (opts.body !== undefined) {
+        init.body = (typeof opts.body === 'string')
+          ? opts.body
+          : JSON.stringify(opts.body);
+      }
+      const r = await fetch(url, init);
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value, {stream: true});
+        try { await cb(chunk); } catch (e) {}
+      }
+      return {
+        status: r.status,
+        ok: r.ok,
+        headers: Object.fromEntries(r.headers),
+      };
+    },
+  };
+})();
+"""
+
+
 def _find_real_chrome_profile() -> Path | None:
     """Find the user's real Chrome profile directory."""
     if sys.platform == "win32":
@@ -346,6 +440,17 @@ class UCBrowser:
 
         if self.use_stealth and self.mode != BrowserMode.NATIVE_CDP:
             self._init_stealth()
+
+        # Install the generic API shim so site recipes can call the page's
+        # own ``fetch`` from Python — inheriting whatever auth / token
+        # rotation / anti-bot decoration the site's JS does. Site-agnostic;
+        # site recipes supply the endpoint, body, and response parser.
+        try:
+            if self._context is not None:
+                self._context.add_init_script(_UC_API_SHIM_JS)
+                logger.info("Installed __UC_apiShim into context.")
+        except PlaywrightError as e:
+            logger.debug("add_init_script(api shim) failed: %s", e)
 
     def _start_headless(self) -> None:
         """Headless Chrome with saved storage_state for auth."""
