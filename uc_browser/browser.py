@@ -116,10 +116,72 @@ _STATE_FILE = Path(
 _UC_API_SHIM_JS = r"""
 (() => {
   if (window.__UC_apiShim) return;
+
+  // ── Interceptor registry ────────────────────────────────────
+  // Site recipes call ``__UC_apiShim.addInterceptor(regexSrc, cbName)``
+  // to register a URL pattern + the name of a window-bound function
+  // (typically created via Playwright's ``page.expose_function``).
+  // When ``window.fetch`` is called and the URL matches, we clone the
+  // response and deliver ``{url, status, body, done: true}`` to the
+  // callback. The site recipe parses ``body`` (often newline-JSON).
+  //
+  // The hook is installed HERE — inside the init script — so it's in
+  // place before any page bundle has a chance to capture a local
+  // reference to ``window.fetch``.
+  const _interceptors = [];
+  const _origFetch = window.fetch;
+  window.fetch = function(input, init) {
+    let url = '';
+    try {
+      url = typeof input === 'string' ? input : (input?.url || String(input));
+    } catch (e) {}
+    const p = _origFetch.apply(this, arguments);
+    if (_interceptors.length === 0) return p;
+    for (const ic of _interceptors) {
+      let match = false;
+      try { match = ic.regex.test(url); } catch (e) {}
+      if (!match) continue;
+      p.then(async r => {
+        let clone;
+        try { clone = r.clone(); } catch (e) { return; }
+        let body = '';
+        try { body = await clone.text(); } catch (e) {}
+        const cb = window[ic.callbackName];
+        if (typeof cb !== 'function') return;
+        try { await cb({url, status: r.status, body, done: true}); } catch (e) {}
+      }).catch(() => {});
+    }
+    return p;
+  };
+
   window.__UC_apiShim = {
     /**
-     * One-shot fetch via the page's own context.
-     * Returns {status, ok, headers, body}. body is text — caller parses.
+     * Register a URL-pattern interceptor. ``regexSrc`` is a string
+     * RegExp body (no slashes); ``callbackName`` is the global window
+     * function to invoke with the response payload.
+     */
+    addInterceptor(regexSrc, callbackName) {
+      _interceptors.push({regex: new RegExp(regexSrc), callbackName});
+      return _interceptors.length;
+    },
+
+    /**
+     * Drop interceptors whose callback name matches.
+     */
+    removeInterceptor(callbackName) {
+      for (let i = _interceptors.length - 1; i >= 0; i--) {
+        if (_interceptors[i].callbackName === callbackName) {
+          _interceptors.splice(i, 1);
+        }
+      }
+    },
+
+    /**
+     * One-shot fetch via the page's own context. Returns
+     * {status, ok, headers, body}. Body is text — caller parses.
+     * Note: only works on sites whose auth machinery decorates
+     * ``window.fetch`` (or none) — sites with apiClient-level
+     * signing (e.g. Grok's ``x-statsig-id``) reject these calls.
      */
     async fetch(url, opts) {
       opts = opts || {};
@@ -136,7 +198,8 @@ _UC_API_SHIM_JS = r"""
           ? opts.body
           : JSON.stringify(opts.body);
       }
-      const r = await fetch(url, init);
+      // Use the original fetch so we don't recursively re-hook.
+      const r = await _origFetch.call(window, url, init);
       let bodyText = '';
       try { bodyText = await r.text(); } catch (e) { bodyText = '[body read failed]'; }
       return {
@@ -172,7 +235,7 @@ _UC_API_SHIM_JS = r"""
           ? opts.body
           : JSON.stringify(opts.body);
       }
-      const r = await fetch(url, init);
+      const r = await _origFetch.call(window, url, init);
       const reader = r.body.getReader();
       const dec = new TextDecoder();
       while (true) {
