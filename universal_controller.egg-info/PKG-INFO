@@ -21,6 +21,15 @@ Provides-Extra: chrome-cookies
 Requires-Dist: rookiepy>=0.5; extra == "chrome-cookies"
 Provides-Extra: stealth
 Requires-Dist: playwright-stealth<3,>=2.0.2; extra == "stealth"
+Provides-Extra: litellm
+Requires-Dist: litellm[proxy]<2,>=1.82.4; extra == "litellm"
+Provides-Extra: mcp
+Requires-Dist: mcp[cli]<2,>=1; extra == "mcp"
+Provides-Extra: adapter
+Requires-Dist: litellm[proxy]<2,>=1.82.4; extra == "adapter"
+Requires-Dist: mcp[cli]<2,>=1; extra == "adapter"
+Requires-Dist: playwright-stealth<3,>=2.0.2; extra == "adapter"
+Requires-Dist: rookiepy>=0.5; extra == "adapter"
 
 # Universal Controller
 

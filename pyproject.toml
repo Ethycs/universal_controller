@@ -37,8 +37,67 @@ chrome-cookies = [
 stealth = [
     "playwright-stealth>=2.0.2,<3",
 ]
+# litellm CustomLLM provider that routes model="uc/<site>" through a
+# GrokClient-style backend. Used by uc_browser.llm_providers.
+litellm = [
+    "litellm[proxy]>=1.82.4,<2",
+]
+# MCP tool registrations for UCBrowser-driven sites. Used by uc_browser.mcp.
+mcp = [
+    "mcp[cli]>=1,<2",
+]
+# Everything needed to run scripts/serve_mcp_remote.py and the litellm
+# proxy against uc/grok. Convenience union — pulls in litellm, mcp,
+# stealth, chrome-cookies.
+adapter = [
+    "litellm[proxy]>=1.82.4,<2",
+    "mcp[cli]>=1,<2",
+    "playwright-stealth>=2.0.2,<3",
+    "rookiepy>=0.5",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["uc_browser*"]
 exclude = ["extension*", "models*", "scripts*", "ml*", "src*", "tests*"]
+
+# ── pixi environments ────────────────────────────────────────────────
+#
+# Standalone pixi config so the submodule can be `pixi install`'d and
+# run on its own from inside ext/universal_controller/. The parent
+# event-harvester repo has its own pixi config that pip-installs this
+# package editable from `path = "ext/universal_controller"`; the two
+# pixi workspaces are independent — touching one doesn't touch the
+# other.
+#
+# Use:
+#   cd ext/universal_controller
+#   pixi install
+#   pixi run -e dev pytest tests/
+#   pixi run -e dev litellm --config litellm.config.yaml --port 4000
+#     (when a litellm.config.yaml is added next to this pyproject)
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.12,<3.13"
+playwright-stealth = ">=2.0.2,<3"
+
+[tool.pixi.pypi-dependencies]
+universal_controller = { path = ".", editable = true, extras = ["adapter"] }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[tool.pixi.feature.dev.pypi-dependencies]
+pytest = ">=7.0"
+pytest-asyncio = ">=0.21"
+ruff = ">=0.4"
+
+[tool.pixi.feature.dev.tasks]
+test = "pytest -v tests/"
+lint = "ruff check uc_browser/ tests/"
+format = "ruff format uc_browser/ tests/"
