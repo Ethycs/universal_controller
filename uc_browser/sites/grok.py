@@ -125,7 +125,15 @@ _UUID_PATTERN = (
 _PATH_UUID_RE = re.compile(rf"/c/{_UUID_PATTERN}")
 _QUERY_UUID_RE = re.compile(rf"[?&]chat={_UUID_PATTERN}")
 # Strip Grok's "Thought for Ns" reasoning header from streamed responses.
-_THOUGHT_PREFIX_RE = re.compile(r"^Thought for [0-9]+\s*s\s*\n+", flags=re.IGNORECASE)
+# Grok prefixes replies with a reasoning header whose form varies: "Thought for
+# 6s" or the collapsed "Thoughts", each followed by blank line(s) before the
+# answer. Strip whichever leading header is present. The transient streaming-only
+# "Thinking about your request — Ns" banner (no newline terminator, later
+# replaced by the answer) is handled separately in grok_fast._is_reasoning_banner.
+_THOUGHT_PREFIX_RE = re.compile(
+    r"^[ \t]*thought(?:s|[ \t]+for[ \t]+[0-9]+[ \t]*s)\b[^\n]*\r?\n+",
+    flags=re.IGNORECASE,
+)
 
 
 def _conv_id_from_url(url: str) -> Optional[str]:
@@ -217,6 +225,22 @@ class GrokClient:
         self.close()
 
     def _ensure_uc(self) -> UCBrowser:
+        # Recover from an externally-closed browser: if the handle exists but
+        # its context is dead (user quit the window, OS killed it), tear it
+        # down and relaunch instead of returning a corpse that fails on the
+        # next new_page() with TargetClosedError. Stale pages belonged to the
+        # dead browser, so drop them too.
+        if self._uc is not None and not self._uc.is_alive():
+            logger.warning(
+                "UCBrowser context is dead (browser closed?); relaunching."
+            )
+            try:
+                self._uc.close()
+            except Exception as e:  # pragma: no cover - defensive
+                logger.debug("close() during relaunch failed: %s", e)
+            self._uc = None
+            self._pages.clear()
+            self._page_locks.clear()
         if self._uc is None:
             logger.info("Starting UCBrowser for Grok (mode=%s).", self.mode)
             self._uc = UCBrowser(mode=self.mode, timeout_ms=self.timeout_ms)

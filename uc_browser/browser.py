@@ -673,6 +673,27 @@ class UCBrowser:
         self._context = contexts[0] if contexts else self._browser.new_context()
         logger.info("Connected to native Chrome via CDP (port %d).", port)
 
+    def is_alive(self) -> bool:
+        """True if the browser context is still usable.
+
+        Returns False when the browser was closed out from under us (user
+        quit the window, OS killed it, CDP target dropped). Callers can use
+        this to decide whether to tear down and relaunch instead of failing
+        on ``TargetClosedError`` from ``new_page()``.
+        """
+        ctx = self._context
+        if ctx is None:
+            return False
+        try:
+            browser = ctx.browser
+            if browser is not None:
+                return browser.is_connected()
+            # Persistent context without a separate Browser handle: probe.
+            _ = ctx.pages
+            return True
+        except Exception:
+            return False
+
     def close(self) -> None:
         """Shut down browser and Playwright."""
         if self._context:

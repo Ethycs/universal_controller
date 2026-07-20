@@ -35,6 +35,7 @@ import asyncio
 import functools
 import logging
 import os
+import queue as _queue
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -194,6 +195,7 @@ class UCBrowserCustomLLM(CustomLLM):
         optional_params: dict,
         litellm_params: dict | None = None,
         timeout: Any = None,
+        on_delta=None,
         **kwargs: Any,
     ) -> ModelResponse:
         # litellm strips the ``uc/`` prefix before calling us; ``model``
@@ -275,6 +277,7 @@ class UCBrowserCustomLLM(CustomLLM):
                 timeout_s=timeout_s,
                 wait_for_response=wait_for_response,
                 session_key=session_key,
+                on_delta=on_delta,
             )
         except GrokAuthRequired as exc:
             raise litellm.exceptions.AuthenticationError(
@@ -283,7 +286,31 @@ class UCBrowserCustomLLM(CustomLLM):
                 llm_provider=PROVIDER,
             ) from exc
 
-        if session_key is not None and result.get("url"):
+        # Delete-after-capture (opt-in via UC_GROK_DELETE_AFTER_CAPTURE=1).
+        # The reply prose is already in ``result`` and goes into the response
+        # below, so once captured the grok thread is disposable. OFF by default
+        # so threads persist for review; flip the env flag on for clean runs.
+        # Only delete on a NON-EMPTY capture — an empty/failed render keeps its
+        # thread for diagnosis. Best-effort; failures never block the response.
+        captured = (result.get("response") or "").strip()
+        if (
+            os.environ.get("UC_GROK_DELETE_AFTER_CAPTURE") == "1"
+            and result.get("url")
+            and captured
+        ):
+            from uc_browser.sites.grok import get_grok_client
+            try:
+                ok = get_grok_client().delete(result["url"])
+                logger.info(
+                    "[uc] delete-after-capture %s: %s",
+                    "deleted" if ok else "row-not-found", result["url"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[uc] delete-after-capture failed (%s): %s", result["url"], exc
+                )
+            # Thread is gone — don't cache its URL as a continuable session.
+        elif session_key is not None and result.get("url"):
             self.set_session_url(session_key, result["url"])
 
         return _populate_response(
@@ -386,46 +413,57 @@ class UCBrowserCustomLLM(CustomLLM):
             ),
         )
 
-    # ── Streaming (fake) ─────────────────────────────────────────────
+    # ── Streaming (real) ─────────────────────────────────────────────
     #
-    # GrokClient.send() is anchor-locked / blocking — it doesn't expose
-    # token-level streaming. To stay compatible with clients that require
-    # ``stream=True`` (Cline, Open WebUI, some Cursor flows) we emit the
-    # full response as a single SSE content chunk followed by a final
-    # ``is_finished=True`` chunk. This is the "fake streaming" pattern.
+    # GrokClient has no token API, but the DOM-poll capture
+    # (``grok_fast._toolkit_capture`` / ``_poll_dom_response``) already reads
+    # the assistant block as it renders. We pass it an ``on_delta`` sink that
+    # pushes each incremental chunk onto a thread-safe queue; the (a)streaming
+    # generator drains the queue and yields SSE chunks LIVE — so time-to-first-
+    # token drops from the full render time (~24s) to grok's first-token
+    # latency (~1-3s). The blocking ``completion`` runs on the single browser
+    # executor (pushing deltas); the queue drains on a different thread, so
+    # there is no greenlet re-entry and no deadlock. A final reconciliation
+    # emits any remainder for non-streaming fallback paths (one-shot network
+    # capture / ``GrokClient.send``), then the terminal usage chunk.
 
-    def _stream_chunks(self, response: ModelResponse) -> Iterator[GenericStreamingChunk]:
-        content = ""
+    @staticmethod
+    def _content_chunk(text: str) -> GenericStreamingChunk:
+        return GenericStreamingChunk(
+            text=text, tool_use=None, is_finished=False,
+            finish_reason="", usage=None, index=0,
+        )
+
+    @staticmethod
+    def _final_chunk(usage_block) -> GenericStreamingChunk:
+        return GenericStreamingChunk(
+            text="", tool_use=None, is_finished=True,
+            finish_reason="stop", usage=usage_block, index=0,
+        )
+
+    @staticmethod
+    def _usage_block(response: ModelResponse):
+        if getattr(response, "usage", None) is None:
+            return None
         try:
-            content = response.choices[0].message.content or ""
-        except Exception:
-            content = ""
-        usage_block = None
-        if getattr(response, "usage", None) is not None:
-            try:
-                usage_block = {
-                    "prompt_tokens": int(response.usage.prompt_tokens or 0),
-                    "completion_tokens": int(response.usage.completion_tokens or 0),
-                    "total_tokens": int(response.usage.total_tokens or 0),
-                }
-            except Exception:
-                usage_block = None
-        yield GenericStreamingChunk(
-            text=content,
-            tool_use=None,
-            is_finished=False,
-            finish_reason="",
-            usage=None,
-            index=0,
-        )
-        yield GenericStreamingChunk(
-            text="",
-            tool_use=None,
-            is_finished=True,
-            finish_reason="stop",
-            usage=usage_block,
-            index=0,
-        )
+            return {
+                "prompt_tokens": int(response.usage.prompt_tokens or 0),
+                "completion_tokens": int(response.usage.completion_tokens or 0),
+                "total_tokens": int(response.usage.total_tokens or 0),
+            }
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _reconcile_tail(self, response: ModelResponse, streamed: str):
+        """Yield any final content not already streamed (fallback paths)."""
+        try:
+            final = response.choices[0].message.content or ""
+        except Exception:  # noqa: BLE001
+            final = ""
+        if final and final.startswith(streamed) and len(final) > len(streamed):
+            yield self._content_chunk(final[len(streamed):])
+        elif final and not streamed:
+            yield self._content_chunk(final)
 
     def streaming(  # type: ignore[override]
         self,
@@ -437,16 +475,33 @@ class UCBrowserCustomLLM(CustomLLM):
         timeout: Any = None,
         **kwargs: Any,
     ) -> Iterator[GenericStreamingChunk]:
-        response = self.completion(
-            model=model,
-            messages=messages,
-            model_response=model_response,
-            optional_params=optional_params,
-            litellm_params=litellm_params,
-            timeout=timeout,
-            **kwargs,
+        q: "_queue.Queue" = _queue.Queue()
+        sentinel = object()
+
+        def _on_delta(text: str) -> None:
+            if text:
+                q.put(text)
+
+        fut = self._browser_executor.submit(
+            functools.partial(
+                self.completion,
+                model=model, messages=messages, model_response=model_response,
+                optional_params=optional_params, litellm_params=litellm_params,
+                timeout=timeout, on_delta=_on_delta, **kwargs,
+            )
         )
-        yield from self._stream_chunks(response)
+        fut.add_done_callback(lambda _f: q.put(sentinel))
+
+        streamed = ""
+        while True:
+            item = q.get()
+            if item is sentinel:
+                break
+            streamed += item
+            yield self._content_chunk(item)
+        response = fut.result()  # propagate the final response / any exception
+        yield from self._reconcile_tail(response, streamed)
+        yield self._final_chunk(self._usage_block(response))
 
     async def astreaming(  # type: ignore[override]
         self,
@@ -458,17 +513,38 @@ class UCBrowserCustomLLM(CustomLLM):
         timeout: Any = None,
         **kwargs: Any,
     ) -> AsyncIterator[GenericStreamingChunk]:
-        response = await self.acompletion(
-            model=model,
-            messages=messages,
-            model_response=model_response,
-            optional_params=optional_params,
-            litellm_params=litellm_params,
-            timeout=timeout,
-            **kwargs,
+        loop = asyncio.get_running_loop()
+        q: "_queue.Queue" = _queue.Queue()
+        sentinel = object()
+
+        def _on_delta(text: str) -> None:
+            if text:
+                q.put(text)
+
+        fut = loop.run_in_executor(
+            self._browser_executor,
+            functools.partial(
+                self.completion,
+                model=model, messages=messages, model_response=model_response,
+                optional_params=optional_params, litellm_params=litellm_params,
+                timeout=timeout, on_delta=_on_delta, **kwargs,
+            ),
         )
-        for chunk in self._stream_chunks(response):
+        fut.add_done_callback(lambda _f: q.put(sentinel))
+
+        streamed = ""
+        while True:
+            # Block for the next chunk on a default-pool thread so the event
+            # loop stays free (the browser executor is busy with completion).
+            item = await loop.run_in_executor(None, q.get)
+            if item is sentinel:
+                break
+            streamed += item
+            yield self._content_chunk(item)
+        response = await fut  # propagate the final response / any exception
+        for chunk in self._reconcile_tail(response, streamed):
             yield chunk
+        yield self._final_chunk(self._usage_block(response))
 
 
 # ── Registration ─────────────────────────────────────────────────────

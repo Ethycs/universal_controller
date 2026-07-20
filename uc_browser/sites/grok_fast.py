@@ -31,6 +31,7 @@ time, vs ~2.4s overhead on the DOM-only path.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 import time
@@ -56,6 +57,49 @@ logger = logging.getLogger("uc_browser.sites.grok_fast")
 _CHAT_URL_RE = re.compile(
     r"/rest/app-chat/conversations(/new|/[0-9a-fA-F-]+/responses)\b"
 )
+
+
+def _is_reasoning_banner(text: str) -> bool:
+    """True when ``text`` is only grok's reasoning banner, not a real reply.
+
+    Grok shows a reasoning header before the answer in several forms:
+      - ``Thinking about your request — Ns`` — transient, streamed char-by-char
+        and later REPLACED by the answer (no newline terminator while forming),
+      - ``Thoughts`` / ``Thought for Ns`` — collapsed header (handled by
+        ``_strip_thought_prefix``; this catches the bare header before its
+        newline arrives).
+    Such text must never be emitted as a delta nor mistaken for a finished
+    answer. The phrase match is exact-prefix so a real reply that merely starts
+    with "Think…" (but isn't the banner) still streams.
+    """
+    t = (text or "").strip().lower()
+    if not t:
+        return True
+    if t.startswith("thought"):  # "Thoughts", "Thought for Ns"
+        return True
+    banner = "thinking about your request"
+    # partial-while-forming ("thi", "thinking about your") OR the full banner.
+    return banner.startswith(t) or t.startswith(banner)
+
+
+def _stream_delta(cur: str, emitted: str) -> tuple[str, str]:
+    """Incremental text to stream from a growing assistant block.
+
+    Strips grok's reasoning header so it never leaks into the stream, and only
+    emits forward (append-only) growth. Returns ``(delta_to_emit, new_emitted)``;
+    ``delta_to_emit`` may be empty.
+    """
+    visible = _strip_thought_prefix(cur)
+    # Hold back the forming reasoning banner until real answer text appears
+    # (it gets replaced by the answer, at which point `visible` is no longer a
+    # banner and the normal forward-diff below emits the reply).
+    if emitted == "" and _is_reasoning_banner(visible):
+        return "", emitted
+    if visible.startswith(emitted):
+        return visible[len(emitted):], visible
+    # Non-monotonic (markdown reflow, or the banner just got replaced) — resync
+    # silently to the current visible text without re-emitting.
+    return "", visible
 
 
 # ── JS installed once per page ─────────────────────────────────────
@@ -182,6 +226,54 @@ _INSTALL_JS = r"""
     ).length;
   };
 
+  // Track the file chips that pop up on big pastes. Grok turns a paste it
+  // deems too large into a 'pasted-text.txt' attachment — the message then
+  // lives in a file, the editor goes empty, and a naive submit sends nothing
+  // (or sends the file). This returns structured info per chip so callers can
+  // detect that case and recover (e.g. re-type the text into the editor).
+  //
+  // Selectorless by preference: anchor on the semantic Remove button (stable),
+  // walk up to the chip container, read its visible label + the editor state.
+  window.__UC_grokAttachmentInfo = function() {
+    // The authoritative chip container is Grok's attachments list, found
+    // semantically (role=list + aria-label), NOT by the Remove button (which
+    // only exists on hover) or styling classes. Each direct child is a chip.
+    const list = document.querySelector(
+      '[role="list"][aria-label*="attachment" i]'
+    );
+    const chips = [];
+    if (list) {
+      // listitem children if present, else direct element children.
+      let items = list.querySelectorAll(':scope [role="listitem"]');
+      if (!items.length) items = list.children;
+      Array.prototype.forEach.call(items, (el, i) => {
+        const label = (el.innerText || el.getAttribute('aria-label') || '')
+          .trim().replace(/\s+/g, ' ').slice(0, 120);
+        chips.push({
+          index: i,
+          label: label,
+          pasted_text: /pasted[-_ ]?text|\.txt\b/i.test(label),
+        });
+      });
+    }
+    // Fallback: count Remove buttons too, in case the list is structured
+    // differently on some layout.
+    const removeBtns = document.querySelectorAll(
+      'button[aria-label="Remove this attachment" i]'
+    ).length;
+    const pm = document.querySelector('div.ProseMirror');
+    const editor_chars = pm ? (pm.textContent || '').trim().length : -1;
+    return {
+      count: Math.max(chips.length, removeBtns),
+      list_chips: chips.length,
+      remove_buttons: removeBtns,
+      pasted_text_count: chips.filter(c => c.pasted_text).length,
+      editor_chars: editor_chars,
+      list_hidden: list ? list.classList.contains('hidden') : null,
+      chips: chips,
+    };
+  };
+
   // Click every Remove-this-attachment button until none remain (bounded).
   // Returned synchronously by the await — the caller can decide what to do
   // if `remaining > 0` (extremely unlikely under current DOM).
@@ -209,6 +301,87 @@ _INSTALL_JS = r"""
     return true;
   };
 
+  // Shared "did the submit land?" poll, hoisted to window so both the bespoke
+  // trigger chain and the toolkit submit path share one delivery-signal
+  // definition (user-message-appeared / navigated-to-/c/ / composer-cleared).
+  window.__UC_grokPollSubmitted = async function(prevMsgCount, maxMs) {
+    const userMsgSel = 'div[data-testid="user-message"]';
+    const deadline = Date.now() + maxMs;
+    while (Date.now() < deadline) {
+      if (document.querySelectorAll(userMsgSel).length > prevMsgCount) {
+        return {ok: true, reason: 'user-message-appeared'};
+      }
+      const pm = document.querySelector('div.ProseMirror');
+      if (!pm && location.pathname.startsWith('/c/')) {
+        return {ok: true, reason: 'navigated-to-chat'};
+      }
+      if (pm
+          && (pm.textContent || '').trim().length === 0
+          && window.__UC_grokAttachmentCount() === 0) {
+        return {ok: true, reason: 'composer-cleared'};
+      }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return {ok: false};
+  };
+
+  // Is the extension's selectorless structural button finder present? That is
+  // the defining capability of the toolkit submit path; capture degrades
+  // gracefully (stable assistant testid + optional __UC_readLocked), so we
+  // gate only on the one function we cannot substitute. If the extension build
+  // is stale / not loaded we drop to the bespoke chain rather than crash.
+  window.__UC_grokToolkitReady = function() {
+    return typeof window.__UC_findButtons === 'function';
+  };
+
+  // Selectorless submit: take the best-scored send control from the toolkit's
+  // structural button finder (no arrow-svg-path / Tailwind anchors), click it,
+  // confirm with the shared delivery poll. On any miss fall through to the
+  // bespoke trigger chain (icon-anchored div-click → React onSubmit → Enter) so
+  // we never lose the statsig-signed submit ride.
+  window.__UC_grokToolkitSubmit = async function() {
+    const userMsgSel = 'div[data-testid="user-message"]';
+    const prevMsgCount = document.querySelectorAll(userMsgSel).length;
+    try {
+      const btns = window.__UC_findButtons('div.ProseMirror') || [];
+      if (btns.length) {
+        const el = document.querySelector(btns[0].selector);
+        if (el && window.__UC_grokIsClickable(el)) {
+          el.click();
+          const r = await window.__UC_grokPollSubmitted(prevMsgCount, 1500);
+          if (r.ok) {
+            return {ok: true, method: 'toolkit-findButtons',
+                    selector: btns[0].selector, score: btns[0].score,
+                    reason: r.reason};
+          }
+        }
+      }
+    } catch (e) { /* fall through to the bespoke chain */ }
+    const fallback = await window.__UC_grokTriggerSubmit();
+    if (fallback && typeof fallback === 'object') fallback.via = 'bespoke-fallback';
+    return fallback;
+  };
+
+  // Selectorless reply capture: lock the toolkit's response-watch attribute
+  // (data-uc-response="1", read back by __UC_readLocked) onto the NEWEST
+  // assistant reply block. Anchored on grok's stable SEMANTIC testid — not the
+  // rotating Tailwind classes, not a substring match of the echoed prompt
+  // (grok normalizes/truncates it, so that never matches) and explicitly NOT
+  // the trigram extractor (which latched onto page chrome — a cookie-consent
+  // banner — and produced a false-positive render). Idempotent + lazy: safe to
+  // call every poll; locks as soon as a fresh reply block exists past `prev`.
+  window.__UC_grokAnchorLock = function(prevCount) {
+    const els = document.querySelectorAll('div[data-testid="assistant-message"]');
+    if (els.length <= (prevCount || 0)) return {ok: false, why: 'no-new-assistant-block'};
+    const target = els[els.length - 1];
+    if (!target.hasAttribute('data-uc-response')) {
+      document.querySelectorAll('[data-uc-response]')
+        .forEach(e => e.removeAttribute('data-uc-response'));
+      target.setAttribute('data-uc-response', '1');
+    }
+    return {ok: true, lockedSel: '[data-uc-response="1"]', via: 'last-assistant-testid'};
+  };
+
   window.__UC_grokTriggerSubmit = async function() {
     // Submit is fragile on a single path: the React onSubmit handler can
     // 404 (remounted form) or resolve as a silent no-op (detached form),
@@ -232,32 +405,12 @@ _INSTALL_JS = r"""
     const userMsgSel = 'div[data-testid="user-message"]';
     const prevMsgCount = document.querySelectorAll(userMsgSel).length;
 
-    async function pollSubmitted(maxMs) {
-      const deadline = Date.now() + maxMs;
-      while (Date.now() < deadline) {
-        if (document.querySelectorAll(userMsgSel).length > prevMsgCount) {
-          return {ok: true, reason: 'user-message-appeared'};
-        }
-        const pm = document.querySelector('div.ProseMirror');
-        if (!pm && location.pathname.startsWith('/c/')) {
-          return {ok: true, reason: 'navigated-to-chat'};
-        }
-        if (pm
-            && (pm.textContent || '').trim().length === 0
-            && window.__UC_grokAttachmentCount() === 0) {
-          return {ok: true, reason: 'composer-cleared'};
-        }
-        await new Promise(r => setTimeout(r, 50));
-      }
-      return {ok: false};
-    }
-
     // 1) Click the actual send control (most reliable on current UI).
     try {
       const btn = window.__UC_grokFindSendButton();
       if (btn && window.__UC_grokIsClickable(btn)) {
         btn.click();
-        const r = await pollSubmitted(1500);
+        const r = await window.__UC_grokPollSubmitted(prevMsgCount, 1500);
         if (r.ok) return {ok: true, method: 'div-click', reason: r.reason};
         attempts.push({method: 'div-click', cleared: false});
       } else {
@@ -270,7 +423,7 @@ _INSTALL_JS = r"""
       const find = window.__UC_grokFindOnSubmit();
       if (find.ok) {
         await window.__UC_grokOnSubmit({preventDefault: () => {}, persist: () => {}});
-        const r = await pollSubmitted(1500);
+        const r = await window.__UC_grokPollSubmitted(prevMsgCount, 1500);
         if (r.ok) return {ok: true, method: 'react-onsubmit', picked: find, reason: r.reason};
         attempts.push({method: 'react-onsubmit', cleared: false, picked: find});
       } else {
@@ -288,7 +441,7 @@ _INSTALL_JS = r"""
         pm.dispatchEvent(new KeyboardEvent('keydown', opts));
         pm.dispatchEvent(new KeyboardEvent('keypress', opts));
         pm.dispatchEvent(new KeyboardEvent('keyup', opts));
-        const r = await pollSubmitted(1500);
+        const r = await window.__UC_grokPollSubmitted(prevMsgCount, 1500);
         if (r.ok) return {ok: true, method: 'enter-key', reason: r.reason};
         attempts.push({method: 'enter-key', cleared: false});
       }
@@ -352,8 +505,14 @@ class GrokFastClient:
         conversation_url: Optional[str] = None,
         session_key: Optional[str] = None,
         timeout_s: int = 120,
+        on_delta=None,
     ) -> dict:
         """Send a message via React-onSubmit + capture via fetch hook.
+
+        ``on_delta``: optional callable ``(text: str) -> None`` invoked with each
+        incremental chunk of the reply as it renders (real streaming). Only the
+        DOM-poll capture paths stream; the one-shot network-capture path returns
+        whole (the caller reconciles any un-streamed remainder).
 
         Raises ``RuntimeError`` on any structural failure (hook didn't
         install, onSubmit not found, response timeout). Callers should
@@ -378,18 +537,56 @@ class GrokFastClient:
                 "(sel) => document.querySelectorAll(sel).length", assistant_sel,
             )
 
+            # ── Preferred path: the selectorless extension toolkit ──────────
+            # Use the extension's structural button finder + anchor/baseline
+            # capture instead of grok-specific selectors. Only taken when the
+            # toolkit functions are actually present on the page (extension
+            # loaded + a build that exposes them); otherwise we drop to the
+            # bespoke network path below. ``UC_GROK_DISABLE_TOOLKIT=1`` forces
+            # the bespoke path (escape hatch for regressions).
+            toolkit_ready = bool(page.evaluate(
+                "() => typeof window.__UC_grokToolkitReady === 'function' "
+                "&& window.__UC_grokToolkitReady()"
+            ))
+            if toolkit_ready and os.environ.get("UC_GROK_DISABLE_TOOLKIT") != "1":
+                try:
+                    return self._send_toolkit(
+                        page, message, assistant_sel, prev_count, timeout_s,
+                        on_delta=on_delta,
+                    )
+                except RuntimeError as e:
+                    # Pre-submit failure ⇒ nothing was sent; safe to fall through
+                    # to the bespoke path (its setText replaces, not appends).
+                    logger.warning(
+                        "[grok_fast] toolkit path pre-submit failure (%s); "
+                        "falling back to bespoke network path", e,
+                    )
+            elif not toolkit_ready:
+                logger.info(
+                    "[grok_fast] selectorless toolkit not present on page; "
+                    "using bespoke path"
+                )
+
             # ``submitted`` gates the failure handling: once the message is
             # confirmed sent (composer cleared), a later timeout must NOT
             # bubble up as a RuntimeError — that would make send_with_fallback
             # re-type the whole message (the double-paste). We poll the DOM
             # for the reply instead.
             submitted = False
+            # The network response (if it matches _CHAT_URL_RE at all) fires
+            # within seconds of submit. If the matcher misses — e.g. a
+            # logged-in continue-chat whose response URL doesn't match — there
+            # is no point waiting the full generation budget here; cap this
+            # phase short and let _poll_dom_response carry the long wait. The
+            # DOM poll watches the actual generating signal, so capping the
+            # network phase costs nothing but saves the wasted minutes.
+            net_capture_s = min(timeout_s, int(os.environ.get("UC_GROK_NET_CAPTURE_S", "45")))
             try:
                 # Set up the network listener BEFORE triggering — Playwright
                 # buffers matching responses from the moment the `with` opens.
                 with page.expect_response(
                     lambda r: bool(_CHAT_URL_RE.search(r.url)),
-                    timeout=timeout_s * 1000,
+                    timeout=net_capture_s * 1000,
                 ) as resp_info:
                     typed = page.evaluate(
                         "(args) => window.__UC_setText && window.__UC_setText(args[0], args[1])",
@@ -399,18 +596,10 @@ class GrokFastClient:
                         raise RuntimeError(
                             f"GrokFastClient: setText failed ({typed.get('error')})"
                         )
-                    # Long pastes get split-input: text in PM, identical text
-                    # as a 'pasted-text.txt' chip. Strip the chips so the
-                    # submit carries only the editor content; otherwise Grok
-                    # replies about the file.
-                    chips = page.evaluate(
-                        "() => window.__UC_grokRemoveAttachments && window.__UC_grokRemoveAttachments()"
-                    ) or {}
-                    if chips.get("removed"):
-                        logger.debug(
-                            "[grok_fast] removed %d attachment chip(s) before submit (remaining=%d)",
-                            chips.get("removed"), chips.get("remaining"),
-                        )
+                    # Settle grok's async paste->file conversion and recover if
+                    # it swallowed the whole message into a chip (kayla/ceraph
+                    # empty-render trap). Shared with the toolkit path.
+                    self._handle_chips(page, message)
                     # Trigger submit (button → React onSubmit → Enter), verified
                     # by the composer clearing. Only then is the send real.
                     trig = page.evaluate("() => window.__UC_grokTriggerSubmit()") or {}
@@ -432,7 +621,9 @@ class GrokFastClient:
                     "[grok_fast] network capture missed after confirmed submit "
                     "(%s); polling DOM for response (no re-send)", e,
                 )
-                return self._poll_dom_response(page, assistant_sel, prev_count, timeout_s)
+                return self._poll_dom_response(
+                    page, assistant_sel, prev_count, timeout_s, on_delta=on_delta
+                )
 
             try:
                 body = response.text()
@@ -459,8 +650,283 @@ class GrokFastClient:
                 "conversation_id": conv_id,
             }
 
+    # ── Selectorless toolkit path ───────────────────────────────────
+
+    def _handle_chips(self, page, message: str) -> None:
+        """Settle grok's async paste->file conversion; recover a chip-only msg.
+
+        Big pastes spill into a ``pasted-text.txt`` attachment chip that
+        materialises a beat AFTER ``setText``. Poll for a settled state (editor
+        has text OR a chip showed) so we don't sample the empty in-between gap,
+        then strip the chips so the submit carries editor content (Grok replies
+        *about* the file otherwise). If the message went ENTIRELY into a chip
+        (editor empty), re-insert it so there is something real to send. Shared
+        by the bespoke and toolkit send paths.
+        """
+        info: dict = {}
+        for _ in range(14):  # up to ~3.5s
+            page.wait_for_timeout(250)
+            info = page.evaluate(
+                "() => window.__UC_grokAttachmentInfo && window.__UC_grokAttachmentInfo()"
+            ) or {}
+            if (info.get("editor_chars") or 0) > 0 or info.get("count"):
+                break
+        logger.info(
+            "[grok_fast] post-setText settled: chips=%d (list=%s remove=%s) "
+            "editor_chars=%s labels=%s",
+            info.get("count"), info.get("list_chips"),
+            info.get("remove_buttons"), info.get("editor_chars"),
+            [c.get("label") for c in (info.get("chips") or [])][:3],
+        )
+        # Text vanished (not in editor, no chip caught) → dump composer markup
+        # so we can find the real file-icon element and build a correct detector.
+        if (info.get("editor_chars") or 0) == 0 and not info.get("count"):
+            dump = page.evaluate(
+                """() => {
+                    const pm = document.querySelector('div.ProseMirror');
+                    const form = pm ? pm.closest('form') : null;
+                    const root = form || (pm ? pm.parentElement : document.body);
+                    if (!root) return null;
+                    const html = (root.outerHTML || '').replace(/\\s+/g, ' ');
+                    return html.slice(0, 2200);
+                }"""
+            )
+            logger.warning("[grok_fast] composer dump (text vanished): %s", dump)
+        # ── Chip-submit: the DEFAULT for large contexts ────────────────
+        # When grok files a large paste into a pasted-text.txt chip, that file
+        # carries the FULL payload (verified end-to-end: a 56K probe round-
+        # tripped with start/mid/end sentinels intact and an exact char count)
+        # and grok renders the scene faithfully FROM the file. The inherited
+        # claim that "grok replies about the file" was tested and REFUTED
+        # (scene02 chip-only, editor empty, produced a full in-character render).
+        # So submit the FILE instead of fighting grok's conversion with the old
+        # strip/re-insert dance — that dance re-formed a chip and left the
+        # visible text+chip "double". Clear any leftover editor text so the
+        # composer is a single clean attachment (file only), not text+chip.
+        # Escape hatch: UC_GROK_STRIP_CHIP=1 forces the old editor-text path.
+        strip_mode = os.environ.get("UC_GROK_STRIP_CHIP") == "1"
+        if info.get("count") and not strip_mode:
+            if (info.get("editor_chars") or 0) > 0:
+                page.evaluate(
+                    "() => window.__UC_setText && window.__UC_setText('div.ProseMirror', '')"
+                )
+                page.wait_for_timeout(200)
+            after = page.evaluate(
+                "() => window.__UC_grokAttachmentInfo && window.__UC_grokAttachmentInfo()"
+            ) or {}
+            logger.info(
+                "[grok_fast] chip-submit: sending the pasted-text.txt file "
+                "(chips=%s editor_chars=%s).",
+                after.get("count"), after.get("editor_chars"),
+            )
+            # Safety: if clearing the editor also dropped the chip, we'd send
+            # nothing — re-insert the message so there is a real payload.
+            if not after.get("count") and (after.get("editor_chars") or 0) == 0:
+                logger.error(
+                    "[grok_fast] chip-submit lost both chip and editor text; "
+                    "re-inserting message as a fallback."
+                )
+                page.evaluate(
+                    "(args) => window.__UC_setText && window.__UC_setText(args[0], args[1])",
+                    ["div.ProseMirror", message],
+                )
+            return
+
+        # ── Editor-text path: no chip formed, OR UC_GROK_STRIP_CHIP=1 ───
+        # No chip → the text is already in the editor; the strip below is a
+        # harmless no-op. With the escape hatch + a chip present, run the old
+        # recover-to-editor dance: re-insert BEFORE stripping (re-inserting
+        # re-triggers grok's paste->file, so strip AFTER to leave one editor
+        # copy).
+        text_in_chip_only = (
+            info.get("count") and (info.get("editor_chars") or 0) == 0
+        )
+        if text_in_chip_only:
+            retyped = page.evaluate(
+                "(args) => window.__UC_setText && window.__UC_setText(args[0], args[1])",
+                ["div.ProseMirror", message],
+            ) or {}
+            for _ in range(8):  # up to ~2s for the async chip to materialise
+                page.wait_for_timeout(250)
+                mid = page.evaluate(
+                    "() => window.__UC_grokAttachmentInfo && window.__UC_grokAttachmentInfo()"
+                ) or {}
+                if (mid.get("editor_chars") or 0) > 0 and mid.get("count"):
+                    break
+            logger.info(
+                "[grok_fast] (strip mode) chip-only message re-inserted (setText ok=%s).",
+                retyped.get("success"),
+            )
+        chips = page.evaluate(
+            "() => window.__UC_grokRemoveAttachments && window.__UC_grokRemoveAttachments()"
+        ) or {}
+        if chips.get("removed"):
+            logger.debug(
+                "[grok_fast] (strip mode) removed %d attachment chip(s) (remaining=%d)",
+                chips.get("removed"), chips.get("remaining"),
+            )
+        if text_in_chip_only:
+            after = page.evaluate(
+                "() => window.__UC_grokAttachmentInfo && window.__UC_grokAttachmentInfo()"
+            ) or {}
+            logger.warning(
+                "[grok_fast] (strip mode) post-recovery composer: editor_chars=%s "
+                "chips=%s (want text>0, chips=0).",
+                after.get("editor_chars"), after.get("count"),
+            )
+            if (after.get("editor_chars") or 0) == 0:
+                logger.error(
+                    "[grok_fast] (strip mode) recovery FAILED: editor empty after "
+                    "chip strip — the chip WAS the only copy; submit sends nothing."
+                )
+
+    def _send_toolkit(
+        self, page, message: str, assistant_sel: str,
+        prev_count: int, timeout_s: int, on_delta=None,
+    ) -> dict:
+        """Send + capture using the extension's selectorless toolkit.
+
+        Insertion still rides ``__UC_setText`` (the toolkit's framework-aware
+        setText). Submit is sourced from the structural button finder
+        (``__UC_findButtons``) rather than a grok arrow-svg-path; capture locks
+        the toolkit response-watch attribute onto the stable ``assistant-message``
+        testid and reads via ``__UC_readLocked`` rather than the network
+        ``expect_response``.
+
+        Contract mirrors the bespoke path: ``RuntimeError`` means a pre-submit
+        failure (nothing sent — caller may safely re-send); a confirmed-submit
+        miss returns a (possibly empty) result rather than raising.
+        """
+        typed = page.evaluate(
+            "(args) => window.__UC_setText && window.__UC_setText(args[0], args[1])",
+            ["div.ProseMirror", message],
+        ) or {}
+        if not typed.get("success"):
+            raise RuntimeError(
+                f"GrokFastClient(toolkit): setText failed ({typed.get('error')})"
+            )
+        self._handle_chips(page, message)
+        trig = page.evaluate("() => window.__UC_grokToolkitSubmit()") or {}
+        if not trig.get("ok"):
+            raise RuntimeError(f"GrokFastClient(toolkit): submit failed: {trig}")
+        logger.info(
+            "[grok_fast] toolkit submit ok via %s (reason=%s via=%s)",
+            trig.get("method"), trig.get("reason"), trig.get("via"),
+        )
+        return self._toolkit_capture(
+            page, message, assistant_sel, prev_count, timeout_s, on_delta=on_delta
+        )
+
+    def _toolkit_capture(
+        self, page, message: str, assistant_sel: str,
+        prev_count: int, timeout_s: int, on_delta=None,
+    ) -> dict:
+        """Capture the reply selectorlessly after a confirmed toolkit submit.
+
+        Each poll lazily locks the toolkit response-watch attribute onto the
+        newest ``assistant-message`` block (stable semantic testid) and reads it
+        via ``__UC_readLocked`` — falling back to the block's ``innerText``.
+        There is NO trigram fallback (it grabbed page chrome — a cookie banner —
+        and faked a render). Completion = reply present + grok's ``stop`` button
+        gone + text settled across two reads. An idle-activity timer
+        (``UC_GROK_EARLY_BAIL_S``) bails on a genuine non-response while
+        surviving grok's stop-button FLICKER (it blips on submit, vanishes, then
+        returns when generation actually starts).
+        """
+        stop_sel = _SELECTORS["stop_button"]
+        early_bail_s = int(os.environ.get("UC_GROK_EARLY_BAIL_S", "60"))
+        t0 = time.monotonic()
+        deadline = t0 + timeout_s
+        last_text = ""
+        stable = 0
+        emitted = ""  # text already streamed via on_delta (prefix-stripped)
+        last_activity = t0  # last poll that saw reply text OR a generating signal
+        bailed = False
+        while time.monotonic() < deadline:
+            page.wait_for_timeout(250)
+            state = page.evaluate(
+                """(args) => {
+                    const stopSel = args[0], asstSel = args[1], prev = args[2];
+                    const stopBtn = document.querySelector(stopSel);
+                    // Lazily lock the toolkit response-watch attribute onto the
+                    // newest assistant block (stable testid) and read it via
+                    // __UC_readLocked. NO trigram/extractResponse fallback — it
+                    // grabbed page chrome (a cookie-consent banner) and faked a
+                    // render. Only ever read from assistant-message blocks past
+                    // `prev`, never arbitrary page text.
+                    let text = '';
+                    const lock = window.__UC_grokAnchorLock(prev);
+                    if (lock && lock.ok && typeof window.__UC_readLocked === 'function') {
+                        text = window.__UC_readLocked() || '';
+                    }
+                    if (!text) {
+                        const els = document.querySelectorAll(asstSel);
+                        if (els.length > prev) {
+                            text = (els[els.length - 1].innerText || '');
+                        }
+                    }
+                    return {text: (text || '').trim(), generating: !!stopBtn};
+                }""",
+                [stop_sel, assistant_sel, prev_count],
+            ) or {}
+            cur = state.get("text") or ""
+            generating = bool(state.get("generating"))
+            now = time.monotonic()
+            # Stream the incremental growth (prefix-stripped) as it renders.
+            if on_delta is not None and cur:
+                delta, emitted = _stream_delta(cur, emitted)
+                if delta:
+                    try:
+                        on_delta(delta)
+                    except Exception:  # noqa: BLE001 — never let a sink break capture
+                        pass
+            # Any sign of life resets the idle clock — this is what survives the
+            # stop-button flicker that made the old loop bail empty at ~0s.
+            if generating or cur:
+                last_activity = now
+            # While only grok's reasoning banner is showing (no real answer yet),
+            # keep waiting — never let the banner settle as the reply (the cause
+            # of the "Thinking about your request — Ns" only-banner captures).
+            if cur and _is_reasoning_banner(_strip_thought_prefix(cur)):
+                last_activity = now
+                last_text = ""
+                stable = 0
+                continue
+            if cur:
+                if cur == last_text:
+                    stable += 1
+                else:
+                    stable = 0
+                    last_text = cur
+                # Complete: reply present, generation stopped, text settled.
+                if not generating and stable >= 2:
+                    break
+            # Idle-bail: no text AND no generating signal for the whole window.
+            if (now - last_activity) >= early_bail_s:
+                logger.warning(
+                    "[grok_fast] toolkit idle-bail: no reply text or generating "
+                    "signal for %ds — treating as non-response.", early_bail_s,
+                )
+                bailed = True
+                break
+
+        resp = _strip_thought_prefix(last_text)
+        if not resp:
+            diag = self._capture_empty_diagnostic(page, assistant_sel)
+            logger.warning(
+                "[grok_fast] toolkit empty response after %ds (bailed=%s). diagnostic=%s",
+                int(time.monotonic() - t0), bailed, diag,
+            )
+        final_url = page.url
+        return {
+            "response": resp,
+            "url": final_url,
+            "conversation_id": _conv_id_from_url(final_url),
+        }
+
     def _poll_dom_response(
-        self, page, assistant_sel: str, prev_count: int, timeout_s: int
+        self, page, assistant_sel: str, prev_count: int, timeout_s: int,
+        on_delta=None,
     ) -> dict:
         """Read the assistant reply from the DOM after a confirmed submit.
 
@@ -472,10 +938,20 @@ class GrokFastClient:
         flight, so this path exists precisely to avoid the double-paste.
         """
         stop_sel = _SELECTORS["stop_button"]
-        deadline = time.monotonic() + timeout_s
+        # Early-bail: if Grok shows NO sign of forming a reply (no generating
+        # signal, no new assistant block) within this window, stop waiting —
+        # a silent moderation block / non-response otherwise burns the whole
+        # timeout_s. The legitimate "thinking before first token" gap is well
+        # under a minute, so 60s is safe; override via UC_GROK_EARLY_BAIL_S.
+        early_bail_s = int(os.environ.get("UC_GROK_EARLY_BAIL_S", "60"))
+        t0 = time.monotonic()
+        deadline = t0 + timeout_s
         last_text = ""
         stable = 0
+        emitted = ""  # text already streamed via on_delta (prefix-stripped)
         seen_generating = False
+        saw_new_block = False
+        bailed = False
         while time.monotonic() < deadline:
             page.wait_for_timeout(250)
             state = page.evaluate(
@@ -490,11 +966,40 @@ class GrokFastClient:
                 }""",
                 [assistant_sel, stop_sel, prev_count],
             ) or {}
+            if state.get("generating"):
+                seen_generating = True
+            if state.get("ready"):
+                saw_new_block = True
+            # No response forming at all after the early-bail window → stop.
+            if (
+                not seen_generating
+                and not saw_new_block
+                and (time.monotonic() - t0) >= early_bail_s
+            ):
+                logger.warning(
+                    "[grok_fast] early-bail: no generating signal or new "
+                    "assistant block after %ds — treating as non-response.",
+                    early_bail_s,
+                )
+                bailed = True
+                break
             if not state.get("ready"):
                 continue
             cur = state.get("text") or ""
+            # Stream the incremental growth (prefix-stripped) as it renders.
+            if on_delta is not None and cur:
+                delta, emitted = _stream_delta(cur, emitted)
+                if delta:
+                    try:
+                        on_delta(delta)
+                    except Exception:  # noqa: BLE001 — never let a sink break capture
+                        pass
+            # Reasoning-banner-only text isn't a real answer yet — keep waiting.
+            if cur and _is_reasoning_banner(_strip_thought_prefix(cur)):
+                last_text = ""
+                stable = 0
+                continue
             if state.get("generating"):
-                seen_generating = True
                 last_text = cur
                 stable = 0
                 continue
@@ -510,11 +1015,55 @@ class GrokFastClient:
                 last_text = cur
 
         final_url = page.url
+        resp = _strip_thought_prefix(last_text)
+        if not resp:
+            # Empty reply (bail or timeout): capture what Grok actually shows so
+            # the failure is explainable (silent refusal vs visible moderation
+            # message vs genuine non-response).
+            diag = self._capture_empty_diagnostic(page, assistant_sel)
+            logger.warning(
+                "[grok_fast] empty response after %ds (bailed=%s). diagnostic=%s",
+                int(time.monotonic() - t0), bailed, diag,
+            )
         return {
-            "response": _strip_thought_prefix(last_text),
+            "response": resp,
             "url": final_url,
             "conversation_id": _conv_id_from_url(final_url),
         }
+
+    def _capture_empty_diagnostic(self, page, assistant_sel: str) -> dict:
+        """Snapshot the page when a confirmed-submit produced no reply text.
+
+        Distinguishes the empty-render failure modes: a visible refusal /
+        moderation message (``refusal_language`` populated), Grok producing
+        an assistant block we failed to read (``last_assistant_snippet`` set
+        but text empty), or a genuine silent non-response (no blocks, no
+        refusal). Logged so kayla/ceraph-style empties become diagnosable.
+        """
+        try:
+            return page.evaluate(
+                """(asstSel) => {
+                    const els = document.querySelectorAll(asstSel);
+                    const last = els.length
+                        ? (els[els.length - 1].innerText || '').trim().slice(0, 400)
+                        : null;
+                    const body = document.body ? (document.body.innerText || '') : '';
+                    const re = /(I (can'?t|cannot|won'?t|will not)|not able to|against (our|the|my) (guidelines|policy|principles)|content policy|I'?m sorry|unable to (help|assist|continue)|can'?t (help|assist|continue|generate)|violat|not comfortable|won'?t be able)/i;
+                    const m = body.match(re);
+                    const refusal = m ? body.slice(Math.max(0, m.index - 60), m.index + 200) : null;
+                    return {
+                        url: location.href,
+                        assistant_blocks: els.length,
+                        last_assistant_snippet: last,
+                        refusal_language: refusal,
+                        composer_present: !!document.querySelector('div.ProseMirror'),
+                        body_chars: body.length,
+                    };
+                }""",
+                assistant_sel,
+            ) or {}
+        except Exception as e:  # noqa: BLE001
+            return {"diag_error": str(e)}
 
 
 # ── Top-level orchestrator: fast → DOM fallback ───────────────────
@@ -547,6 +1096,7 @@ def send_with_fallback(
     session_key: Optional[str] = None,
     timeout_s: int = 60,
     wait_for_response: bool = True,
+    on_delta=None,
 ) -> dict:
     """Send a message via the fast path, falling back to DOM on any error.
 
@@ -577,6 +1127,7 @@ def send_with_fallback(
             conversation_url=conversation_url,
             session_key=session_key,
             timeout_s=timeout_s,
+            on_delta=on_delta,
         )
     except RuntimeError as fast_err:
         logger.warning(

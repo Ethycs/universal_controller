@@ -1,0 +1,65 @@
+# litellm proxy config for the uc/grok browser-driven backend.
+#
+# Run:
+#   pixi run -e dev litellm --config litellm.config.yaml --port 4000
+#
+# WARNING: keep --num_workers at 1. The handler holds a single GrokClient
+# whose Chrome profile is single-writer; running multiple proxy workers
+# would launch competing browser processes against the same on-disk
+# profile and corrupt it.
+#
+# Once the proxy is up, any OpenAI-shaped client works:
+#
+#   from openai import OpenAI
+#   client = OpenAI(api_key="anything", base_url="http://localhost:4000/v1")
+#   resp = client.chat.completions.create(
+#       model="uc-grok",
+#       messages=[{"role": "user", "content": "Reply in one word: hi"}],
+#       # Continue the same Grok chat across calls:
+#       extra_body={"session_id": "demo-1"},
+#   )
+#   print(resp.choices[0].message.content)
+#   print(resp.model_extra.get("hidden_params", {}))  # has uc_conversation_url
+#
+# Blind / fire-and-forget (~1.6 s, returns empty content):
+#   client.chat.completions.create(
+#       model="uc-grok",
+#       messages=[...],
+#       extra_body={"session_id": "demo-1", "wait_for_response": false},
+#   )
+
+model_list:
+  # Public name = "uc-grok". Internally routed to "uc/grok" which our
+  # CustomLLM resolves to the GrokClient singleton.
+  - model_name: uc-grok
+    litellm_params:
+      model: uc/grok
+      # Cap how long we'll wait for a single response. Browser-driven
+      # generation is slower than API LLMs, so set this generously.
+      timeout: 180
+
+  # Convenience alias preserving the OpenAI naming convention.
+  - model_name: grok-browser
+    litellm_params:
+      model: uc/grok
+      timeout: 180
+
+litellm_settings:
+  # Wire the persistent GrokClient-backed handler into the provider map
+  # at proxy startup. The dotted path points at the module-level singleton
+  # in src/event_harvester/llm_providers/uc.py.
+  custom_provider_map:
+    # Routed through uc_provider_loader.py (next to this config) because
+    # the proxy resolves dotted paths as files relative to the config
+    # directory, not as importable Python packages.
+    - provider: uc
+      custom_handler: uc_provider_loader.uc_handler
+
+  # Drop OpenAI-specific params the proxy can't translate to our backend.
+  drop_params: true
+
+general_settings:
+  # Browser automation is single-threaded by construction. Force a single
+  # worker so we don't open competing browsers against the same profile.
+  # (Pass `--num_workers 1` on the CLI as well — this is belt-and-braces.)
+  worker_concurrency: 1
