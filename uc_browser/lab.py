@@ -142,6 +142,20 @@ class Lab:
                     pass
 
             score, where = self.monitor._detect_across_frames(page, bundle)
+            # Vendor-signature fast path: identify the engine, drive its
+            # known launcher. Recorded even on miss — "this site runs
+            # Intercom" is durable intelligence for the profile.
+            try:
+                from uc_browser import vendor_signatures as vs
+                vendors = vs.identify(page)
+                rec["vendors"] = vendors
+                if score < DETECT_GATE and vendors:
+                    if vs.open_widget(page, vendors[0]):
+                        rec["vendor_opened"] = vendors[0]
+                        page.wait_for_timeout(3000)
+                        score, where = self.monitor._detect_across_frames(page, bundle)
+            except Exception:
+                rec["vendors"] = []
             if score < DETECT_GATE:
                 if self.monitor._try_open_widget(page):
                     rec["launcher_used"] = True

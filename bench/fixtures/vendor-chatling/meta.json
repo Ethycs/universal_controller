@@ -1,0 +1,12 @@
+{
+  "name": "vendor-chatling",
+  "url": "https://chatling.ai",
+  "kind": "widget",
+  "vendor": "chatling",
+  "captured_at": "2026-08-28T09:18:42.638824+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": true,
+  "detect_frame": "https://embed.chatling.ai/ag/7468578969",
+  "provenance": "vendor-zoo"
+}

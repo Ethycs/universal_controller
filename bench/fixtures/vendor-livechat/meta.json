@@ -1,0 +1,12 @@
+{
+  "name": "vendor-livechat",
+  "url": "https://www.livechat.com",
+  "kind": "widget",
+  "vendor": "livechat",
+  "captured_at": "2026-08-28T09:17:33.994208+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "about:blank",
+  "provenance": "vendor-zoo"
+}

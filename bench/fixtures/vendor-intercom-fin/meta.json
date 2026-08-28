@@ -1,0 +1,12 @@
+{
+  "name": "vendor-intercom-fin",
+  "url": "https://www.intercom.com/fin",
+  "kind": "widget",
+  "vendor": "intercom-fin",
+  "captured_at": "2026-08-28T09:19:57.739962+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "about:blank",
+  "provenance": "vendor-zoo"
+}

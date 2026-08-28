@@ -1,0 +1,12 @@
+{
+  "name": "vendor-drift",
+  "url": "https://www.drift.com",
+  "kind": "widget",
+  "vendor": "drift",
+  "captured_at": "2026-08-28T09:16:56.778373+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "https://deployment-vxwr8gkfpb.1mind.com/?session=83d3c23a-1ef0-4ef1-9d16-9d1d12af837c&release_env=prod&preprocessing_enabled=false&defer_preprocessing=true&deployment_code=vxwr8gkfpb&flow=default&load_discourse_in_parallel=true&daily_fallback_direct_chat=true&display_mode=widget",
+  "provenance": "vendor-zoo"
+}

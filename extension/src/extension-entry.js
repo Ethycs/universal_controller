@@ -22,6 +22,7 @@ import { setText } from '../../src/actions/text-input.js';
 import { extractLLMContext, generateCopyContext } from '../../src/llm/context-extractor.js';
 import { fullHeapScan, scanFramework } from '../../src/llm/heap-scanner.js';
 import { PatternVerifier } from '../../src/llm/state-machine.js';
+import { VendorScanner } from '../../src/core/vendor-scanner.js';
 
 // ── Self-detection nonce ───────────────────────────────────────────────
 const UC_NONCE = crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
@@ -30,6 +31,10 @@ const UC_ATTR = 'data-uc-nonce';
 // ── Controller instance ────────────────────────────────────────────────
 const controller = new UniversalController({ nonce: UC_NONCE, nonceAttr: UC_ATTR });
 const verifier = new PatternVerifier();
+// Start the vendor scanner immediately so resource-timing entries for
+// lazily-loaded widget loaders accumulate from page load onward.
+const vendorScanner = new VendorScanner();
+try { vendorScanner.start(); } catch (e) { /* resource timing unsupported */ }
 const logFn = (type, msg) => controller.log(type, msg);
 
 // ── State object ───────────────────────────────────────────────────────
@@ -723,6 +728,12 @@ window.__UC_stopPassive = function () {
 
 window.__UC_getPassiveResults = function () {
   return controller.getPassiveResults();
+};
+
+// ── Vendor signatures (chat-engine identification) ─────────────────────
+
+window.__UC_scanVendors = function () {
+  try { return vendorScanner.scan(); } catch (e) { return []; }
 };
 
 // ── Signatures ─────────────────────────────────────────────────────────

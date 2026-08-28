@@ -1,0 +1,12 @@
+{
+  "name": "vendor-tawk",
+  "url": "https://www.tawk.to",
+  "kind": "widget",
+  "vendor": "tawk",
+  "captured_at": "2026-08-28T09:17:25.691902+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "https://www.tawk.to/",
+  "provenance": "vendor-zoo"
+}

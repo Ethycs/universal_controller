@@ -1,0 +1,12 @@
+{
+  "name": "vendor-hubspot",
+  "url": "https://www.hubspot.com",
+  "kind": "widget",
+  "vendor": "hubspot",
+  "captured_at": "2026-08-28T21:43:23.799401+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "https://app.hubspot.com/conversations-visitor/53/threads/utk/14310f0718794a68bf90d98d5b1ba4c3?uuid=7ba437eb8b444e81a0fbbb614c13627b&mobile=false&mobileSafari=false&hideWelcomeMessage=false&hstc=20629287.9abfee2d1b4d1bdc1664440498a1f7be.1787894820824.1787894820824.1787908744355.2&domain=hubspot.com&inApp53=false&messagesUtk=14310f0718794a68bf90d98d5b1ba4c3&url=https%3A%2F%2Fwww.hubspot.com%2F&inline=false&isFullscreen=false&globalCookieOptOut=&isFirstVisitorSession=false&isAttachmentDisabled=false&isInitialInputFocusDisabled=false&enableWidgetCookieBanner=false&isInCMS=true&hideScrollToButton=true&isIOSMobile=false&hubspotUtk=9abfee2d1b4d1bdc1664440498a1f7be",
+  "provenance": "vendor-zoo"
+}

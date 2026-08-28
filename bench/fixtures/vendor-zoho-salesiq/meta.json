@@ -1,0 +1,12 @@
+{
+  "name": "vendor-zoho-salesiq",
+  "url": "https://www.zoho.com/salesiq/",
+  "kind": "widget",
+  "vendor": "zoho-salesiq",
+  "captured_at": "2026-08-28T09:19:00.895084+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "https://www.zoho.com/salesiq/",
+  "provenance": "vendor-zoo"
+}

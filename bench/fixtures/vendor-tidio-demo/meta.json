@@ -1,0 +1,12 @@
+{
+  "name": "vendor-tidio-demo",
+  "url": "https://www.tidio.com/lyro-ai-chatbot/",
+  "kind": "widget",
+  "vendor": "tidio-demo",
+  "captured_at": "2026-08-28T09:20:15.887102+00:00",
+  "truth": {},
+  "resolved": {},
+  "launcher_used": false,
+  "detect_frame": "https://www.tidio.com/ai-agent/",
+  "provenance": "vendor-zoo"
+}
