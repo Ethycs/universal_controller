@@ -1,0 +1,446 @@
+{
+  "name": "bootstrap-forms",
+  "url": "https://getbootstrap.com/docs/5.3/forms/form-control/",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:10:37.836152+00:00",
+  "final_url": "https://getbootstrap.com/docs/5.3/forms/form-control/",
+  "truth": {
+    "input": [],
+    "send": [],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "bootstrap-forms",
+    "url": "https://getbootstrap.com/docs/5.3/forms/form-control/",
+    "kind": "negative",
+    "truth_input": [],
+    "truth_send": [],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Form-heavy docs page."
+  },
+  "probe": [
+    {
+      "url": "https://getbootstrap.com/docs/5.3/forms/form-control/",
+      "title": "Form controls \u00b7 Bootstrap v5.3",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": "exampleFormControlTextarea1",
+          "cls": "form-control",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "form-control form-control-lg",
+          "placeholder": ".form-control-lg",
+          "ariaLabel": ".form-control-lg example",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "form-control",
+          "placeholder": "Default input",
+          "ariaLabel": "default input example",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "form-control form-control-sm",
+          "placeholder": ".form-control-sm",
+          "ariaLabel": ".form-control-sm example",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "form-control",
+          "placeholder": "Disabled input",
+          "ariaLabel": "Disabled input example",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "form-control",
+          "placeholder": null,
+          "ariaLabel": "Disabled input example",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "form-control",
+          "placeholder": null,
+          "ariaLabel": "readonly input example",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "staticEmail",
+          "cls": "form-control-plaintext",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "staticEmail2",
+          "cls": "form-control-plaintext",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "exampleDataList",
+          "cls": "form-control",
+          "placeholder": "Type to search...",
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "DocSearch DocSearch-Button",
+          "placeholder": null,
+          "ariaLabel": "Search (Ctrl+K)",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn btn-link nav-link py-2 px-0 px-lg-2 dropdown-toggle",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "bd-theme",
+          "cls": "btn btn-link nav-link px-0 px-lg-2 py-2 dropdown-toggle d-flex align-items-cente",
+          "placeholder": null,
+          "ariaLabel": "Toggle theme (light)",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn btn-primary mb-3",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-edit text-nowrap",
+          "placeholder": null,
+          "ariaLabel": "Try it on StackBlitz",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "btn-clipboard mt-0 me-0",
+          "placeholder": null,
+          "ariaLabel": "Copy to clipboard",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

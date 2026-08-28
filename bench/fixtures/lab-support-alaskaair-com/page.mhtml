@@ -1,0 +1,780 @@
+From: <Saved by Blink>
+Snapshot-Content-Location: https://support.alaskaair.com/
+Subject: Remote Support Portal
+Date: Thu, 27 Aug 2026 22:25:26 -0700
+MIME-Version: 1.0
+Content-Type: multipart/related;
+	type="text/html";
+	boundary="----MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----"
+
+
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: text/html
+Content-ID: <frame-702E3C349DFA7FAB2EEBF0A4F21F3168@mhtml.blink>
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://support.alaskaair.com/
+
+<!DOCTYPE html><html lang=3D"en-us"><head><meta http-equiv=3D"Content-Type"=
+ content=3D"text/html; charset=3DUTF-8">
+=09
+	<title>Remote Support Portal</title>
+	<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1=
+.0, maximum-scale=3D1.0">
+
+<link href=3D"https://support.alaskaair.com/content/common.css" rel=3D"styl=
+esheet" type=3D"text/css">
+<link href=3D"https://support.alaskaair.com/content/public.css" rel=3D"styl=
+esheet" type=3D"text/css">
+<link href=3D"https://support.alaskaair.com/content/mobile.css" rel=3D"styl=
+esheet" type=3D"text/css">
+
+
+<link href=3D"https://support.alaskaair.com/css/console.css" rel=3D"stylesh=
+eet" type=3D"text/css">
+
+
+
+		=09
+		<link rel=3D"prefetch" type=3D"text/plain" href=3D"https://support.alaska=
+air.com/chat/assets/fonts/Inter-Latin.woff2">
+		<link rel=3D"prefetch" type=3D"text/plain" href=3D"https://support.alaska=
+air.com/chat/assets/fonts/NotoSans-Latin.woff2">
+	</head>
+<body>
+<div id=3D"container">
+
+<div id=3D"header" class=3D"contentBox header-wrapper">
+	<div>
+		<div class=3D"pageTitle" id=3D"support_portal">
+			Support Portal
+		</div>
+		<div class=3D"lang-selection">
+			<svg xmlns=3D"http://www.w3.org/2000/svg" x=3D"0px" y=3D"0px" viewBox=3D=
+"0 0 20 20" xml:space=3D"preserve" id=3D"globe-image">
+<path fill=3D"#B9D9EB" class=3D"st0" d=3D"M4.4,13c-0.9-0.4-2-0.9-2.6-1.8l-0=
+.4-0.5h3.2l0,0.3c0,0.5,0.1,1.1,0.2,1.6l0.1,0.6L4.4,13L4.4,13
+	z M8.9,13.9c-0.8,0-1.6-0.1-2.3-0.3l-0.2,0l0-0.2c-0.1-0.8-0.2-1.5-0.3-2.3l0=
+-0.4h3.3v3.3L8.9,13.9L8.9,13.9z M13.4,13.6
+	c-0.8,0.1-1.5,0.2-2.3,0.3l-0.4,0v-3.3h3.3l0,0.4c0,0.8-0.1,1.6-0.3,2.3l0,0.=
+2L13.4,13.6L13.4,13.6z M18.2,11.2
+	c-0.6,0.9-1.7,1.4-2.6,1.8l-0.5,0.2l0.1-0.6c0.1-0.5,0.1-1.1,0.2-1.6l0-0.3h3=
+.2L18.2,11.2L18.2,11.2z M15.6,7c0.9,0.4,2,0.9,2.6,1.8
+	l0.4,0.5h-3.2l0-0.3c0-0.5-0.1-1.1-0.2-1.6l-0.1-0.6L15.6,7L15.6,7z M11.1,6.=
+1c0.8,0,1.6,0.1,2.3,0.3l0.2,0l0,0.2
+	c0.1,0.8,0.2,1.5,0.3,2.3l0,0.4h-3.3V6.1L11.1,6.1L11.1,6.1z M6.6,6.4c0.8-0.=
+1,1.5-0.2,2.3-0.3l0.4,0v3.3H6.1l0-0.4
+	c0-0.8,0.1-1.6,0.3-2.3l0-0.2L6.6,6.4L6.6,6.4z M1.8,8.8C2.4,7.9,3.5,7.3,4.4=
+,7l0.5-0.2L4.8,7.3C4.8,7.9,4.7,8.4,4.7,9l0,0.3H1.4
+	L1.8,8.8L1.8,8.8z M5.3,14.9c0.2,0.7,0.5,1.5,0.9,2.1l0.6,1l-1-0.6c-1.3-0.8-=
+2.5-1.9-3.2-3.2l-0.6-1l1,0.6c0.7,0.4,1.4,0.7,2.1,0.9
+	l0.2,0.1L5.3,14.9L5.3,14.9z M9.3,15.3v3.2l-0.5-0.4c-0.9-0.6-1.4-1.7-1.8-2.=
+6l-0.2-0.5l0.6,0.1c0.5,0.1,1.1,0.1,1.6,0.2L9.3,15.3
+	L9.3,15.3z M13,15.6c-0.4,0.9-0.9,2-1.8,2.6l-0.5,0.4v-3.2l0.3,0c0.5,0,1.1-0=
+.1,1.6-0.2l0.6-0.1L13,15.6L13,15.6z M13.8,17
+	c0.4-0.7,0.7-1.4,0.9-2.1l0.1-0.2l0.2-0.1c0.7-0.2,1.5-0.5,2.1-0.9l1-0.6l-0.=
+6,1c-0.8,1.3-1.9,2.5-3.2,3.2l-1,0.6L13.8,17L13.8,17z
+	 M14.7,5.1c-0.2-0.7-0.5-1.5-0.9-2.1l-0.6-1l1,0.6c1.3,0.8,2.5,1.9,3.2,3.2l0=
+.6,1l-1-0.6c-0.7-0.4-1.4-0.6-2.1-0.9l-0.2-0.1
+	L14.7,5.1L14.7,5.1z M10.7,4.7V1.4l0.5,0.4c0.9,0.6,1.4,1.7,1.8,2.6l0.2,0.5l=
+-0.6-0.1c-0.5-0.1-1.1-0.1-1.6-0.2L10.7,4.7L10.7,4.7z
+	 M7,4.4c0.4-0.9,0.9-2,1.8-2.6l0.5-0.4v3.2L9,4.7c-0.5,0-1.1,0.1-1.6,0.2L6.8=
+,4.9L7,4.4L7,4.4z M2.5,5.7c0.8-1.3,1.9-2.5,3.2-3.2
+	l1-0.6L6.2,3C5.9,3.6,5.6,4.4,5.3,5.1L5.3,5.3L5.1,5.3C4.4,5.6,3.6,5.9,3,6.2=
+l-1,0.6L2.5,5.7L2.5,5.7z M10,0C4.5,0,0,4.5,0,10
+	s4.5,10,10,10s10-4.5,10-10S15.5,0,10,0L10,0z"></path>
+</svg>
+
+			<span class=3D"language_selection" id=3D"language_selection">
+	<span class=3D"single">English (US)</span>
+</span>
+		</div>
+	</div>
+=09
+</div>
+
+<div class=3D"contentBox" id=3D"repListBox">
+	<h1 class=3D"sectionTitle">
+		<span>
+		Representatives
+		</span>
+			<a rel=3D"help" title=3D"Show Representatives Help Window" href=3D"https=
+://support.alaskaair.com/help?show_help=3Dhelp_rep_list" target=3D"_blank" =
+class=3D"popup-if-possible" data-open-options=3D"toolbar=3Dno, directories=
+=3Dno, status=3Dno, menubar=3Dno, scrollbars=3Dyes, resizable=3Dyes, height=
+=3D300, width=3D400" id=3D"help_rep_list" data-window-name=3D"help_rep_list=
+_popup">
+	<img src=3D"https://support.alaskaair.com/content/help_16.png" alt=3D"Show=
+ Representatives Help Window">
+</a>
+
+
+		</h1>
+		</div>
+
+<div class=3D"contentBox" id=3D"sessionKeyBox">
+	<h1 class=3D"sectionTitle">
+		<span>
+		Session Key
+		</span>
+			<a rel=3D"help" title=3D"Show Session Key Help Window" href=3D"https://s=
+upport.alaskaair.com/help?show_help=3Dhelp_session_keys" target=3D"_blank" =
+class=3D"popup-if-possible" data-open-options=3D"toolbar=3Dno, directories=
+=3Dno, status=3Dno, menubar=3Dno, scrollbars=3Dyes, resizable=3Dyes, height=
+=3D300, width=3D400" id=3D"help_session_keys" data-window-name=3D"help_sess=
+ion_keys_popup">
+	<img src=3D"https://support.alaskaair.com/content/help_16.png" alt=3D"Show=
+ Session Key Help Window">
+</a>
+
+
+		</h1>
+
+	<div>
+	<form action=3D"https://support.alaskaair.com/check_access_key" method=3D"=
+get" id=3D"access_key_form">
+	<label id=3D"access_key_pretty:label" for=3D"access_key_pretty" class=3D"a=
+ccessible">Session Key</label>
+	<input type=3D"text" name=3D"access_key_pretty" id=3D"access_key_pretty" v=
+alue=3D"" size=3D"20" maxlength=3D"20" autocomplete=3D"off">
+	<input type=3D"submit" name=3D"access_key_submit" id=3D"access_key_submit"=
+ value=3D"Submit" disabled=3D"">
+	<img src=3D"https://support.alaskaair.com/content/loading.gif" alt=3D"" cl=
+ass=3D"hidden" id=3D"session_key_loading_gif" style=3D"display: none;">
+	<div id=3D"access_key_error" class=3D"hidden error" style=3D"display: none=
+;"></div>
+</form>
+
+
+
+<span class=3D"params" id=3D"access_key_params" data-chat-enabled=3D"true">=
+</span>
+
+<span class=3D"params" id=3D"access_key_strings" data-invalid-key=3D"The ke=
+y that you entered is not valid." data-validation-error=3D"Error validating=
+ access key."></span>
+
+
+	</div>
+	</div>
+
+<div class=3D"contentBox" id=3D"issueSubmissionBox">
+	<h1 class=3D"sectionTitle">
+		<span>
+		Issue Submission
+		</span>
+			<a rel=3D"help" title=3D"Show Issue Submission Help Window" href=3D"http=
+s://support.alaskaair.com/help?show_help=3Dhelp_issues_menu" target=3D"_bla=
+nk" class=3D"popup-if-possible" data-window-name=3D"help_issues_menu_popup"=
+ data-open-options=3D"toolbar=3Dno, directories=3Dno, status=3Dno, menubar=
+=3Dno, scrollbars=3Dyes, resizable=3Dyes, height=3D300, width=3D400">
+	<img src=3D"https://support.alaskaair.com/content/help_16.png" alt=3D"Show=
+ Issue Submission Help Window" id=3D"help_issues_menu">
+</a>
+
+
+		</h1>
+
+	<div>
+		<span class=3D"issues_menu">
+	<div>
+		<span class=3D"bg-required-hint"><em>Required field</em></span>
+	</div>
+
+	<form class=3D"tableless" name=3D"issues_menu" action=3D"https://support.a=
+laskaair.com/download_client_connector" method=3D"post" id=3D"issues_form">
+		<div>
+		=09
+		<div>
+	<label id=3D"issues:id:label" for=3D"issues:id" class=3D"required">Your Is=
+sue</label>
+	<span>
+		<select id=3D"issues:id" name=3D"id">
+			<option value=3D"" selected=3D"selected" disabled=3D"disabled">
+				- Please choose an issue -
+			</option>
+							<option value=3D"1">Other Issue</option>
+					</select>
+	</span>
+	</div>
+	<div>
+		<label class=3D"" id=3D"issues:internal.customer_name:label" for=3D"issue=
+s:internal.customer_name">Your Name
+		</label>
+			<span>
+			<input type=3D"text" name=3D"internal.customer_name" value=3D"" id=3D"is=
+sues:internal.customer_name" class=3D"issues_menu" size=3D"40" maxlength=3D=
+"100">
+		</span>
+		</div>
+	<div>
+		<label class=3D"" id=3D"issues:internal.customer_company:label" for=3D"is=
+sues:internal.customer_company">Company Name
+		</label>
+			<span>
+			<input type=3D"text" name=3D"internal.customer_company" value=3D"" id=3D=
+"issues:internal.customer_company" class=3D"issues_menu" size=3D"40" maxlen=
+gth=3D"100">
+		</span>
+		</div>
+	<div>
+		<label class=3D"" id=3D"issues:internal.customer_company_code:label" for=
+=3D"issues:internal.customer_company_code">Company Code
+		</label>
+			<span>
+			<input type=3D"text" name=3D"internal.customer_company_code" value=3D"" =
+id=3D"issues:internal.customer_company_code" class=3D"issues_menu" size=3D"=
+40" maxlength=3D"100">
+		</span>
+		</div>
+	<div>
+		<label class=3D"" id=3D"issues:internal.customer_details:label" for=3D"is=
+sues:internal.customer_details">Describe Your Issue
+		</label>
+			<span>
+			<textarea rows=3D"3" cols=3D"37" name=3D"internal.customer_details" id=
+=3D"issues:internal.customer_details" class=3D"issues_menu" maxlength=3D"10=
+24"></textarea>
+		</span>
+		</div>
+
+	<div>
+		<label id=3D"issues:issue_menu:label" for=3D"issues:issue_menu">
+			<span class=3D"accessible">Submit your issue and download BeyondTrust Re=
+mote Support</span>
+		</label>
+		<span>
+			<input id=3D"issues:submit" type=3D"submit" value=3D"Submit" disabled=3D=
+"">
+		</span>
+	</div>
+	</div>
+</form>
+
+</span>
+
+
+<span class=3D"params" id=3D"issueFormParams" data-chat-enabled=3D"true" da=
+ta-display-reps=3D"false"></span>
+
+
+	</div>
+	</div>
+
+
+
+
+
+
+
+
+
+
+<div id=3D"footer">
+	Copyright =C2=A9 2002-2025 BeyondTrust Corporation. Redistribution Prohibi=
+ted. All Rights Reserved.
+</div>
+
+<div id=3D"powered-by">
+	<a id=3D"powered_by_text" href=3D"https://www.beyondtrust.com/" class=3D"i=
+nverse" target=3D"_blank" rel=3D"noopener">BeyondTrust Remote Support</a>
+</div>
+
+</div>
+
+
+
+</body></html>
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: image/gif
+Content-Transfer-Encoding: base64
+Content-Location: https://support.alaskaair.com/content/loading.gif
+
+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
+
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-Location: https://support.alaskaair.com/content/help_16.png
+
+iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAD8GlDQ1BJQ0MgUHJvZmlsZQAAOI2N
+Vd1v21QUP4lvXKQWP6Cxjg4Vi69VU1u5GxqtxgZJk6XpQhq5zdgqpMl1bhpT1za2021Vn/YCbwz4
+A4CyBx6QeEIaDMT2su0BtElTQRXVJKQ9dNpAaJP2gqpwrq9Tu13GuJGvfznndz7v0TVAx1ea45hJ
+GWDe8l01n5GPn5iWO1YhCc9BJ/RAp6Z7TrpcLgIuxoVH1sNfIcHeNwfa6/9zdVappwMknkJsVz19
+HvFpgJSpO64PIN5G+fAp30Hc8TziHS4miFhheJbjLMMzHB8POFPqKGKWi6TXtSriJcT9MzH5bAzz
+HIK1I08t6hq6zHpRdu2aYdJYuk9Q/881bzZa8Xrx6fLmJo/iu4/VXnfH1BB/rmu5ScQvI77m+Bkm
+fxXxvcZcJY14L0DymZp7pML5yTcW61PvIN6JuGr4halQvmjNlCa4bXJ5zj6qhpxrujeKPYMXEd+q
+00KR5yNAlWZzrF+Ie+uNsdC/MO4tTOZafhbroyXuR3Df08bLiHsQf+ja6gTPWVimZl7l/oUrjl8O
+cxDWLbNU5D6JRL2gxkDu16fGuC054OMhclsyXTOOFEL+kmMGs4i5kfNuQ62EnBuam8tzP+Q+tSqh
+z9SuqpZlvR1EfBiOJTSgYMMM7jpYsAEyqJCHDL4dcFFTAwNMlFDUUpQYiadhDmXteeWAw3HEmA2s
+15k1RmnP4RHuhBybdBOF7MfnICmSQ2SYjIBM3iRvkcMki9IRcnDTthyLz2Ld2fTzPjTQK+Mdg8y5
+nkZfFO+se9LQr3/09xZr+5GcaSufeAfAww60mAPx+q8u/bAr8rFCLrx7s+vqEkw8qb+p26n11Aru
+q6m1iJH6PbWGv1VIY25mkNE8PkaQhxfLIF7DZXx80HD/A3l2jLclYs061xNpWCfoB6WHJTjbH0mV
+35Q/lRXlC+W8cndbl9t2SfhU+Fb4UfhO+F74GWThknBZ+Em4InwjXIyd1ePnY/Psg3pb1TJNu15T
+MKWMtFt6ScpKL0ivSMXIn9QtDUlj0h7U7N48t3i8eC0GnMC91dX2sTivgloDTgUVeEGHLTizbf5D
+a9JLhkhh29QOs1luMcScmBXTIIt7xRFxSBxnuJWfuAd1I7jntkyd/pgKaIwVr3MgmDo2q8x6IdB5
+QH162mcX7ajtnHGN2bov71OU1+U0fqqoXLD0wX5ZM005UHmySz3qLtDqILDvIL+iH6jB9y2x83ok
+898GOPQX3lk3Itl0A+BrD6D7tUjWh3fis58BXDigN9yF8M5PJH4B8Gr79/F/XRm8m241mw/wvur4
+BGDj42bzn+Vmc+NL9L8GcMn8F1kAcXgSteGGAAAARGVYSWZNTQAqAAAACAACARIAAwAAAAEAAQAA
+h2kABAAAAAEAAAAmAAAAAAACoAIABAAAAAEAAAAQoAMABAAAAAEAAAAQAAAAAP4l5FwAAAFZaVRY
+dFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEv
+IiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDov
+L3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3Jp
+cHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOnRpZmY9Imh0dHA6Ly9ucy5hZG9i
+ZS5jb20vdGlmZi8xLjAvIj4KICAgICAgICAgPHRpZmY6T3JpZW50YXRpb24+MTwvdGlmZjpPcmll
+bnRhdGlvbj4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgIDwvcmRmOlJERj4KPC94OnhtcG1l
+dGE+Chle4QcAAAF+SURBVDgRpZM9SANBEIW/PU2I/9HCn0ZNkUIELSwUGwtRbAwBCxvtBIMgptYq
+SFpbQS3sbAVLwWBno4UGLAwoImiigiAxasyte0k25LgjTRbuht157+2b2V3xN+2T1DGMOrhFqrtA
+vmyqyVfS13OX3RodawVFnhjHCK1Cey/8ZpG3F8jjffj4dMCdAkNBjOgBoi+IfLxGdI4ixuaRgWHM
+eEQJ5m0i9hKUVTEZKpLNkx3MlSkKWzPI9L0SCcPggI1sTRwOZOoKczeCvDyDnxy8PKuorPsC6lM9
+sUpsEBUhu4BHJRIJyi2EFi9icR3RP4K8UYJ3KRvZ1QGWiDXUCYjlDYyFTeTpHubhNuS+S7mqv70H
+OmHZ7PJjzK4hk+cl8tOrztqivQSdsmrMZjGPYsiHJKTfqDjTmHJ0d6BBbX5Eawd4PXrFEd0FrJvX
+3YOxFEeEo9BcvpEOussxFjFWIzNpzNgc8j0DX87maS1R8zXqN6BPRrOqonsTNaAGUUP+ATroaoOg
+Zrq6AAAAAElFTkSuQmCC
+
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://support.alaskaair.com/css/console.css
+
+@charset "utf-8";
+
+.console { text-align: left; max-width: 1000px; min-width: 60em; margin: 0p=
+x auto; }
+
+.console .loading { margin: 10px auto; display: block; }
+
+.console code { display: block; font-family: "Menlo Regular", "Lucida Conso=
+le", "Courier New", monospace; white-space: pre; margin: 0.5em auto; paddin=
+g: 1em; font-size: 1em; border: thin outset rgb(191, 191, 191); background:=
+ black; color: rgb(191, 191, 191); overflow: auto; }
+
+.console.chunked { width: 58em; min-width: 58em; border: 0.2em solid rgb(19=
+4, 191, 191); }
+
+.console.chunked code { width: 80ch; }
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://support.alaskaair.com/content/mobile.css
+
+@charset "utf-8";
+
+@media only screen and (max-device-width: 979px) {
+  * { box-sizing: border-box; }
+  #header { padding: 10px; }
+  #header .pageTitle { font-size: 22px; }
+  #header .logo-container { height: 44px; float: left; }
+  #logo { width: 80%; height: 80%; }
+  div#container { width: 100%; margin: 0px; }
+  .contentBox { margin: 0px 0px 8px; padding: 24px 12px 12px; border: 2px s=
+olid rgb(194, 191, 191); }
+  .contentBox h1 { font-size: 16px; }
+  .contentBox h2 { font-size: 14px; }
+  .contentBox h3 { font-size: 12px; }
+  .contentBox h1, .contentBox h2, .contentBox h3 { margin: -24px -12px 6px;=
+ padding: 4px 6px; }
+  form.tableless label { padding: 3px 0px; text-align: left; width: auto; c=
+lear: right; }
+  form.tableless span { margin-bottom: 6px; display: block; clear: both; }
+  form.tableless input[type=3D"text"], form.tableless textarea { width: 100=
+%; max-width: 524px; }
+  input, select { height: 24px; }
+  input, select, textarea, button { font-size: inherit; }
+  .repLink { font-size: 14px; }
+  #footer { padding: 6px; text-align: center; }
+  #powered-by { margin: 6px; }
+  input[type=3D"button"], input[type=3D"reset"], input[type=3D"submit"], bu=
+tton { background-color: rgb(255, 85, 0); border: 1px solid rgb(95, 96, 98)=
+; color: white; border-radius: 7px; display: inline-block; padding: 4px 12p=
+x; margin-bottom: 0px; font-size: 14px; line-height: 14px; text-align: cent=
+er; vertical-align: middle; cursor: pointer; background-repeat: repeat-x; b=
+ackground-image: linear-gradient(rgb(255, 122, 66) 0%, rgb(255, 85, 0) 50%,=
+ rgb(230, 76, 0) 100%); }
+  input[type=3D"button"][disabled], input[type=3D"reset"][disabled], input[=
+type=3D"submit"][disabled], button[disabled] { color: rgb(204, 204, 204); b=
+order-color: rgb(204, 204, 204); background-color: rgb(255, 255, 255); back=
+ground-image: linear-gradient(rgb(255, 255, 255) 0%, rgb(255, 255, 255) 100=
+%); }
+}
+
+@media only screen and (max-width: 767px) and (orientation: portrait) {
+  #header .pageTitle { text-align: left; }
+  #header .lang-selection { text-align: left; }
+}
+
+@media handheld {
+  #logo { width: 100px; height: 20px; text-align: right; }
+  .sectionTitle { text-align: left; }
+  .sectionTitle span { float: none; display: inline; }
+  form.tableless label, form.tableless span { text-align: left; }
+  .accessible { display: none !important; }
+}
+
+ul.section-start-buttons { list-style-type: none; }
+
+.session-start-buttons { padding: 0px; margin: 15px 0px; }
+
+.session-start-buttons li { padding: 0px; margin: 0px 0px 16px; }
+
+.session-start-buttons button { font-size: 21px; display: block; padding: 8=
+px; margin: 16px auto; width: 160px; }
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://support.alaskaair.com/content/public.css
+
+@charset "utf-8";
+
+body { position: relative; }
+
+#header .pageTitle { text-align: left; color: black; line-height: 1.5em; }
+
+#header .pageTitleContainer { float: left; }
+
+#header .lang-selection { text-align: left; }
+
+#header .lang-selection .language_selection > span.single { line-height: 20=
+px; }
+
+#header.header-wrapper .lang-selection > * { float: left; }
+
+#header.header-wrapper .lang-selection > :first-child { margin-right: 6px; =
+}
+
+#header.header-wrapper > div { display: inline-block; }
+
+#header.header-wrapper .logo { float: right; text-align: right; }
+
+#header.header-wrapper .logo img { max-width: 250px; max-height: 64px; }
+
+#header .lang-selection svg { width: 20px; height: 20px; }
+
+.sectionTitle { text-align: right; line-height: 1.4em; }
+
+.sectionTitle span { float: left; display: block; }
+
+.sectionTitle a[rel=3D"help"] img { vertical-align: middle; }
+
+.ambushContentBox { color: black; background-color: rgb(186, 216, 235); }
+
+.ambushContentBox .sectionTitle { text-align: left; }
+
+ul.scheduleMessageList { list-style-type: none; }
+
+ul.ambushMessageList { margin: 0px; padding: 0px; list-style-position: insi=
+de; }
+
+ul.ambushMessageList > li { margin-bottom: 15px; }
+
+ul.ambushMessageList > li:last-of-type { margin-bottom: 0px; }
+
+#powered-by { font-size: 0.9em; padding: 0.5em 1em; }
+
+.recordingViewer { width: 530px; height: 300px; margin: 20px auto; }
+
+#repInviteChoices { display: flex; flex-direction: row; align-items: flex-s=
+tart; justify-content: space-between; max-width: 100%; }
+
+#repInviteChoices.chrome-os { justify-content: center; }
+
+#repInviteChoices h4 { display: flex; flex-direction: column; align-items: =
+center; margin-bottom: 0px; text-align: center; max-width: 100%; }
+
+#repInviteChoices h4 a { display: inline-flex; flex-direction: row; align-i=
+tems: inherit; max-width: 100%; }
+
+#repInviteChoices ul { max-width: 100%; }
+
+#repInviteChoices > div:first-of-type h4 img { margin-right: 5px; }
+
+#repInviteChoices .or { font-size: large; align-self: center; }
+
+#exitSurveyForm .group-td-vert, #exitSurveyForm .group-td-vert.answers, #ex=
+itSurveyForm .group-td-vert.answers .choice { display: block; }
+
+.params { display: none; }
+
+.hidden { display: none; }
+
+#publicFileStore #header > span { height: 41px; float: left; }
+
+#publicFileStore #header .pageTitle { text-align: right; line-height: 60px;=
+ }
+
+#publicFileStore #footer > div { float: right; }
+
+#exitSurveyForm .wrapper { margin-left: 1em; }
+
+#exitSurveyForm .submitButton { margin-top: 1em; }
+
+#exitSurveyForm .questionDiv { margin-top: 1em; }
+
+#jumpAuthRequestForm .submit { margin: 4px; }
+
+#jumpAuthRequestForm .request-text { white-space: pre-wrap; }
+
+#jumpAuthRequestForm > table { width: 100%; }
+
+#jumpAuthRequestForm #comments { width: 98%; }
+
+#chatTranscriptBox hr { width: 85%; }
+
+.cookieMessage { display: none; }
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-Location: https://support.alaskaair.com/content/reddot.png
+
+iVBORw0KGgoAAAANSUhEUgAAAAcAAAAHAQMAAAD+nMWQAAAAAXNSR0IArs4c6QAAAAZQTFRF/1UA
+////se50qgAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9oIHhUIJv/+kOoAAAATSURBVAjX
+Y/jHcIyhCQyPMfwDACNwBQ8bBahXAAAAAElFTkSuQmCC
+
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://support.alaskaair.com/content/common.css
+
+@charset "utf-8";
+
+body { color: rgb(80, 81, 83); font-family: Helvetica, Arial, sans-serif; f=
+ont-size: 12px; text-align: center; background-color: rgb(255, 255, 255); }
+
+a { text-decoration: none; color: rgb(255, 85, 0); }
+
+a:hover { text-decoration: underline; color: rgb(80, 81, 83); }
+
+input, select, textarea, button { color: black; font-family: Arial, Helveti=
+ca, sans-serif; font-size: 1em; }
+
+code, input[type=3D"text"], input[type=3D"number"], input[type=3D"password"=
+], input[type=3D"email"], select, textarea { background-color: rgb(185, 217=
+, 235); border: 1px solid rgb(95, 96, 99); border-radius: 3px; }
+
+select { max-width: 50em; }
+
+input[type=3D"button"], input[type=3D"reset"], input[type=3D"submit"], butt=
+on, a.button { background-color: rgb(255, 85, 0); border: 1px solid rgb(80,=
+ 81, 83); color: white; border-radius: 7px; padding: 3px 6px; }
+
+a.button { text-decoration: none; padding: 3px 6px; cursor: pointer; }
+
+input[disabled], select[disabled], textarea[disabled], button[disabled=3D"d=
+isabled"] { background-color: rgb(255, 255, 255); border-color: rgb(204, 20=
+4, 204); color: rgb(204, 204, 204); }
+
+hr { height: 1px; border: 0px; color: rgb(194, 191, 191); background-color:=
+ rgb(194, 191, 191); }
+
+code { color: black; border: 1px outset rgb(0, 0, 0); padding: 0.5em; font-=
+family: "Courier New", Courier, monospace; }
+
+code.block { display: block; margin: 0.5em 0px; }
+
+p { margin: 1em 0px; }
+
+pre { padding: 1em; background-color: rgb(238, 238, 238); border: 0.1em das=
+hed rgb(80, 81, 83); font-size: 1em; }
+
+img, a img { border-width: 0px; }
+
+div#container, .container { width: 60em; margin: 0px auto; text-align: left=
+; }
+
+table { background-color: transparent; border-collapse: collapse; }
+
+td, th, form.tableless label { margin: 0.1em; padding: 0.1em; }
+
+form.tableless label, th { text-align: right; vertical-align: top; font-wei=
+ght: 800; min-width: 30px; }
+
+form.tableless label a, th a { color: rgb(80, 81, 83); }
+
+form.tableless br { clear: left; margin-bottom: 0.7em; }
+
+thead tr th, tr.header th { text-align: center; vertical-align: bottom; min=
+-width: 30px; }
+
+tr.header th div.expander { text-align: left; float: left; }
+
+.note { font-size: 0.8em; color: rgb(170, 170, 170); }
+
+.editViewNote { margin-top: 0.25em; margin-left: 1.5em; color: rgb(111, 112=
+, 114); }
+
+.editViewNote.last { margin-bottom: 1em; }
+
+tr.even > td { background-color: rgb(240, 240, 240); }
+
+tr.odd > td { background-color: rgb(248, 248, 248); }
+
+tr.userdisabled, span.userdisabled { background-color: rgb(238, 170, 170); =
+}
+
+#header a { font-weight: bold; text-decoration: none; }
+
+#footer { padding: 0.5em 1em; color: rgb(80, 81, 83); font-size: 0.9em; }
+
+#footer.admin { text-align: center; }
+
+#footer a { color: rgb(80, 81, 83); }
+
+.occlude { background-color: rgb(185, 217, 235); border: 0.1em solid rgb(19=
+4, 191, 191); z-index: 100; }
+
+.boxTitle { font-size: 1em; color: rgb(80, 81, 83); text-decoration: none; =
+font-weight: bold; }
+
+.error { color: red !important; font-weight: bold; }
+
+h3.error ul { text-align: left; }
+
+.warning { color: goldenrod !important; font-weight: bold; }
+
+.info { color: black !important; font-weight: bold; }
+
+.success { color: blue !important; font-weight: bold; }
+
+.fakeDisabled { background-color: rgb(255, 255, 255); border-color: rgb(204=
+, 204, 204); color: rgb(204, 204, 204); cursor: not-allowed; }
+
+.contentBox { width: 100%; margin: 0.75em; padding: 2em; border: 0.2em soli=
+d rgb(194, 191, 191); }
+
+* > .contentBox { width: auto; }
+
+.contentBox h1, .contentBox h2, .contentBox h3 { margin: -1.67em -1.67em 1e=
+m; padding: 0.4em 1.33em; background-color: rgb(80, 81, 83); border-bottom:=
+ 0.1em solid rgb(194, 191, 191); color: white; text-decoration: none; font-=
+weight: 900; font-size: 1.2em; }
+
+.contentBox h2 { border-top: 0.1em solid rgb(194, 191, 191); margin: 1em -1=
+em; }
+
+.contentBox h3 { margin: 1.2em 0px; padding: 0.2em 1.2em; border: 0.1em sol=
+id rgb(194, 191, 191); font-size: 1.1em; }
+
+.contentBox h3.error, .contentBox h3.success { background-color: rgb(238, 2=
+38, 238); text-align: center; font-weight: bold; }
+
+.contentBox h3.error ul, .contentBox h3.success ul { list-style-position: i=
+nside; }
+
+.pageTitle { font-size: 1.8em; }
+
+.wide { width: 100%; }
+
+table.grid { background-color: white; border: 0.2em solid rgb(203, 219, 235=
+); }
+
+table.grid tr td { border: 0.1em solid rgb(203, 219, 235); }
+
+table.grid tr th { background-color: rgb(185, 217, 235); border: 0.2em soli=
+d rgb(203, 219, 235); }
+
+table.grid tr th[scope=3D"row"] { width: 20%; }
+
+table.grid label.radio { display: table; }
+
+.padding, table.padding td, table.padding th { padding: 0.3em; }
+
+span.required, td.required span, span.bg-required-hint, label.required { ba=
+ckground: url("/content/reddot.png") left top no-repeat transparent; paddin=
+g-left: 7px; }
+
+.issues_menu span.bg-required-hint { padding-left: 16px; }
+
+.tableless[name=3D"issues_menu"] label.required { background-position: righ=
+t top; }
+
+.tableless[name=3D"issues_menu"] div > span { margin-left: 2px; }
+
+a.inverse { color: rgb(80, 81, 83); }
+
+a.inverse:hover { color: rgb(255, 85, 0); }
+
+.tab { padding-left: 0.8em; padding-right: 0.8em; }
+
+.lang-selection img { vertical-align: bottom; }
+
+.language-selector { display: inline; }
+
+.language-selector svg { vertical-align: bottom; margin-bottom: 0px; }
+
+form.tableless > div { display: flex; flex-direction: column; }
+
+form.tableless > div > div { display: flex; }
+
+form.tableless label { display: block; padding: 0px 1em; text-align: right;=
+ width: 12em; color: black; }
+
+form.tableless span { display: block; margin-bottom: 0.5em; padding: 0px; }
+
+form.tableless span select { padding: 1px; }
+
+.accessible { position: absolute; top: 0px; left: -500em; width: 1px; heigh=
+t: 1px; overflow: hidden; }
+
+.group-td-vert.answers { min-width: 15em; white-space: nowrap; }
+
+.group-td-vert.answers .choice { white-space: nowrap; margin-right: 0.5em; =
+}
+
+.floatClear { display: block; clear: both; }
+
+.underline { text-decoration: underline; }
+
+.right { float: right; clear: right; text-align: right; }
+
+.p-message { display: flex; align-items: center; padding: 10px 15px; margin=
+: 10px 0px; border: 1px solid black; border-radius: 4px; background-color: =
+rgb(189, 216, 234); color: rgb(74, 74, 74); font-size: 1.2em; }
+
+.p-message__icon { width: 20px; height: 20px; display: flex; align-items: c=
+enter; justify-content: center; border-radius: 50%; background-color: rgb(1=
+89, 216, 234); border: 1px solid black; margin-right: 10px; color: black; f=
+ont-size: 14px; font-weight: bold; background-clip: padding-box; }
+
+.p-message__text { line-height: 1.4; }
+
+.break-insanely-long-words { overflow-wrap: anywhere; word-break: normal; }
+
+@supports not (overflow-wrap: anywhere) {
+  .break-insanely-long-words { word-break: break-word; }
+}
+
+@supports not ((word-break: break-word) or (overflow-wrap: anywhere)) {
+  .break-insanely-long-words { overflow-wrap: break-word; }
+}
+------MultipartBoundary--LMqfTVZbzc9j9aiW6nnmZZ6aU1Hev7Ogls19gm3SP2------

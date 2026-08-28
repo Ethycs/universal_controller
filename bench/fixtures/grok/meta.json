@@ -1,0 +1,211 @@
+{
+  "name": "grok",
+  "url": "https://grok.com",
+  "kind": "chat",
+  "captured_at": "2026-08-28T03:15:35.096577+00:00",
+  "final_url": "https://grok.com/",
+  "truth": {
+    "input": [
+      "div.ProseMirror[contenteditable=\"true\"]",
+      "textarea"
+    ],
+    "send": [
+      "button[data-testid=\"chat-submit\"]",
+      "button[type=\"submit\"]",
+      "button[aria-label*=\"Submit\" i]"
+    ],
+    "messages": []
+  },
+  "resolved": {
+    "input": {
+      "selector": "textarea",
+      "tag": "TEXTAREA",
+      "rect": {
+        "w": 726,
+        "h": 42
+      },
+      "frame": "https://grok.com/"
+    },
+    "send": {
+      "selector": "button[data-testid=\"chat-submit\"]",
+      "tag": "BUTTON",
+      "rect": {
+        "w": 40,
+        "h": 40
+      },
+      "frame": "https://grok.com/"
+    }
+  },
+  "pre_clicks_done": [],
+  "site": {
+    "name": "grok",
+    "url": "https://grok.com",
+    "kind": "chat",
+    "truth_input": [
+      "div.ProseMirror[contenteditable=\"true\"]",
+      "textarea"
+    ],
+    "truth_send": [
+      "button[data-testid=\"chat-submit\"]",
+      "button[type=\"submit\"]",
+      "button[aria-label*=\"Submit\" i]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "May show login wall; grok_fast.py knows these selectors too \u2014 that duplication is deliberate (oracle vs product)."
+  },
+  "probe": [
+    {
+      "url": "https://grok.com/",
+      "title": "Grok",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": null,
+          "cls": "w-full px-2 prose !max-w-none leading-7 bg-transparent focus:outline-none text-f",
+          "placeholder": null,
+          "ariaLabel": "Ask Grok anything",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "TEXTAREA",
+          "id": null,
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "vendor-search-handler",
+          "cls": null,
+          "placeholder": "Search\u2026",
+          "ariaLabel": "Cookie list search",
+          "testid": null,
+          "ce": null,
+          "visible": false
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": "radix-_r_2e_",
+          "cls": "items-center justify-center gap-2 whitespace-nowrap text-sm font-medium leading-",
+          "placeholder": null,
+          "ariaLabel": "Settings",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-med",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-med",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "radix-_r_2q_",
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-med",
+          "placeholder": null,
+          "ariaLabel": "Attach",
+          "testid": "attach-button",
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "model-select-trigger",
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-med",
+          "placeholder": null,
+          "ariaLabel": "Model select",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "group flex flex-col justify-center rounded-full focus:outline-none focus-visible",
+          "placeholder": null,
+          "ariaLabel": "Submit",
+          "testid": "chat-submit",
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "text-primary",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "text-primary/45 hover:text-primary absolute right-1.5 top-1.5 flex size-6 items-",
+          "placeholder": null,
+          "ariaLabel": "Dismiss cookie notice",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative isolate inline-flex shrink-0 items-center justify-center rounded-full b",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative isolate inline-flex shrink-0 items-center justify-center rounded-full b",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fgrok.com%2F&title=Grok&referrer=&muid=06321071-db2b-424e-ad3d-3fcd1664bc0db91cc0&sid=13f41cfd-88c3-4f2e-a861-aefe4e1cd802dcaf3d&version=6&preview=false&__shared_params__[version]=basil",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fgrok.com%2F&title=Grok&referrer=&muid=06321071-db2b-424e-ad3d-3fcd1664bc0db91cc0&sid=13f41cfd-88c3-4f2e-a861-aefe4e1cd802dcaf3d&version=6&preview=false&__shared_params__[version]=basil",
+      "title": "StripeM-Inner",
+      "inputs": [],
+      "buttons": []
+    }
+  ]
+}

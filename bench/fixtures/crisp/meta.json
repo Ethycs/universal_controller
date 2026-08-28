@@ -1,0 +1,244 @@
+{
+  "name": "crisp",
+  "url": "https://crisp.chat/en/",
+  "kind": "widget",
+  "captured_at": "2026-08-28T03:17:15.269936+00:00",
+  "final_url": "https://crisp.chat/en/",
+  "truth": {
+    "input": [
+      "textarea[name='message']",
+      "textarea"
+    ],
+    "send": [
+      "button[aria-label*=\"Send\" i]",
+      "button[type=\"submit\"]"
+    ],
+    "messages": []
+  },
+  "resolved": {
+    "input": {
+      "selector": "textarea[name='message']",
+      "tag": "TEXTAREA",
+      "rect": {
+        "w": 359,
+        "h": 18
+      },
+      "frame": "https://crisp.chat/en/"
+    }
+  },
+  "pre_clicks_done": [
+    "[aria-label=\"Open chat\" i]",
+    "[data-chat-status]"
+  ],
+  "site": {
+    "name": "crisp",
+    "url": "https://crisp.chat/en/",
+    "kind": "widget",
+    "truth_input": [
+      "textarea[name='message']",
+      "textarea"
+    ],
+    "truth_send": [
+      "button[aria-label*=\"Send\" i]",
+      "button[type=\"submit\"]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [
+      "[aria-label=\"Open chat\" i]",
+      "[data-chat-status]"
+    ],
+    "wait_ms": 10000,
+    "login_required": false,
+    "notes": ""
+  },
+  "probe": [
+    {
+      "url": "https://crisp.chat/en/",
+      "title": "The AI Customer Support Platform for Every Business - Crisp",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": null,
+          "cls": "cc-7jtwt cc-3rfgc cc-1icrj",
+          "placeholder": "Compose your message...",
+          "ariaLabel": "Compose your message...",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "home-hero-app__play",
+          "placeholder": null,
+          "ariaLabel": "Play video",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "page-footer-locale__button page-footer-locale__option page-footer-locale__option",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "common-button common-button--white common-button--small font-sans-regular page-b",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-17bzd cc-17bzd--home cc-55g6d cc-55g6d--home cc-17bzd--icon-only cc-1s7vo",
+          "placeholder": null,
+          "ariaLabel": "Home",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-17bzd cc-17bzd--chat cc-55g6d cc-55g6d--chat cc-17bzd--active cc-1i4l1 cc-1s7",
+          "placeholder": null,
+          "ariaLabel": "Messages",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-17bzd cc-17bzd--helpdesk cc-55g6d cc-55g6d--helpdesk cc-1s7vo",
+          "placeholder": null,
+          "ariaLabel": "Articles",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-17bzd cc-17bzd--search cc-55g6d cc-55g6d--search cc-1s7vo",
+          "placeholder": null,
+          "ariaLabel": "Search",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "SPAN",
+          "id": null,
+          "cls": "cc-jt9ms",
+          "placeholder": null,
+          "ariaLabel": "Quick Actions",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-13g2n",
+          "placeholder": null,
+          "ariaLabel": "How can Crisp help me?",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-13g2n",
+          "placeholder": null,
+          "ariaLabel": "How can I setup my AI Agent?",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-13g2n",
+          "placeholder": null,
+          "ariaLabel": "What are Crisp features?",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-13g2n",
+          "placeholder": null,
+          "ariaLabel": "What is Hugo?",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "SPAN",
+          "id": null,
+          "cls": "cc-gxd7t cc-vsrr7",
+          "placeholder": null,
+          "ariaLabel": "Insert an emoji",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "SPAN",
+          "id": null,
+          "cls": "cc-gxd7t cc-vsrr7",
+          "placeholder": null,
+          "ariaLabel": "Send a file",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "SPAN",
+          "id": null,
+          "cls": "cc-gxd7t cc-vsrr7",
+          "placeholder": null,
+          "ariaLabel": "Audio message",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "SPAN",
+          "id": null,
+          "cls": "cc-1qqgc cc-1qqgc--enabled cc-1j90r",
+          "placeholder": null,
+          "ariaLabel": "Send",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "cc-13wro",
+          "placeholder": null,
+          "ariaLabel": "Close chat",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

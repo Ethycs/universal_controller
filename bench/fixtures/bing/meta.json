@@ -1,0 +1,182 @@
+{
+  "name": "bing",
+  "url": "https://www.bing.com",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:10:13.891815+00:00",
+  "final_url": "https://www.bing.com/",
+  "truth": {
+    "input": [],
+    "send": [],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "bing",
+    "url": "https://www.bing.com",
+    "kind": "negative",
+    "truth_input": [],
+    "truth_send": [],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": ""
+  },
+  "probe": [
+    {
+      "url": "https://www.bing.com/",
+      "title": "Search - Microsoft Bing",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": "sb_form_q",
+          "cls": "sb_form_q",
+          "placeholder": "Search the web",
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "dots_tab_selection tooltip",
+          "placeholder": null,
+          "ariaLabel": "More",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "id_rh_w",
+          "cls": "id_button tooltip  linkBtn",
+          "placeholder": null,
+          "ariaLabel": "Microsoft Rewards",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "id_mobile",
+          "cls": "id_button",
+          "placeholder": null,
+          "ariaLabel": "Mobile",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "id_sc",
+          "cls": "idp_ham hphbtop linkBtn",
+          "placeholder": null,
+          "ariaLabel": "Settings and quick links",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "b_icon tooltip",
+          "placeholder": null,
+          "ariaLabel": "Search using voice",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": "sb_cam_island",
+          "cls": "hp_island_host camera icon",
+          "placeholder": null,
+          "ariaLabel": "Search using an image",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": "sb_form_clear",
+          "cls": "clear icon tooltip hidden",
+          "placeholder": null,
+          "ariaLabel": "Clear",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "leftNav",
+          "cls": "leftNav ",
+          "placeholder": null,
+          "ariaLabel": "Previous image",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "rightNav",
+          "cls": "rightNav disabled",
+          "placeholder": null,
+          "ariaLabel": "Next image",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "sb_feedback_floating",
+          "cls": "feedback_button",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "hideShowCaro",
+          "cls": "down tooltip",
+          "placeholder": null,
+          "ariaLabel": "Toggle feed area position",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "leftNavCaro",
+          "cls": "leftNav disabled",
+          "placeholder": null,
+          "ariaLabel": "Previous news",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": "rightNavCaro",
+          "cls": "rightNav ",
+          "placeholder": null,
+          "ariaLabel": "More news",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "url": "https://www.bing.com/identity/idtokenv2",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    }
+  ]
+}

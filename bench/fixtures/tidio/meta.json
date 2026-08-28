@@ -1,0 +1,207 @@
+{
+  "name": "tidio",
+  "url": "https://www.tidio.com",
+  "kind": "widget",
+  "captured_at": "2026-08-28T03:16:27.080525+00:00",
+  "final_url": "https://www.tidio.com/",
+  "truth": {
+    "input": [
+      "textarea",
+      "[contenteditable=\"true\"]"
+    ],
+    "send": [
+      "button[aria-label*=\"Send\" i]",
+      "button[type=\"submit\"]"
+    ],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "tidio",
+    "url": "https://www.tidio.com",
+    "kind": "widget",
+    "truth_input": [
+      "textarea",
+      "[contenteditable=\"true\"]"
+    ],
+    "truth_send": [
+      "button[aria-label*=\"Send\" i]",
+      "button[type=\"submit\"]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [
+      "iframe[title*=\"Tidio\" i]",
+      "#tidio-chat iframe",
+      "iframe[src*=\"tidio\" i]"
+    ],
+    "wait_ms": 10000,
+    "login_required": false,
+    "notes": "Widget lives in an iframe; launcher needs a click first."
+  },
+  "probe": [
+    {
+      "url": "https://www.tidio.com/",
+      "title": "AI Customer Service Agent, Customer Support Software | Tidio",
+      "inputs": [],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-1dzg5j2 e9q1mbs0",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-1ysrt10 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-1ysrt10 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-1ysrt10 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-zh09c6 e1vuh75x4",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "css-1xp4b1d e1xesb4j0",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "url": "https://consentcdn.cookiebot.com/sdk/bc-v4.min.html",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    }
+  ]
+}

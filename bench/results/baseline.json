@@ -1,0 +1,262 @@
+{
+  "run_at": "2026-08-28T03:20:29.233493+00:00",
+  "summary": {
+    "positive": {
+      "input_top1": {
+        "hit": 7,
+        "n": 7
+      },
+      "input_gate": {
+        "hit": 7,
+        "n": 7
+      },
+      "input_top5": {
+        "hit": 7,
+        "n": 7
+      },
+      "input_pipeline": {
+        "hit": 7,
+        "n": 7
+      },
+      "send_top1": {
+        "hit": 6,
+        "n": 6
+      },
+      "container_top1": {
+        "hit": 1,
+        "n": 1
+      }
+    },
+    "negative": {
+      "fp_input": {
+        "fp": 1,
+        "n": 7
+      },
+      "fp_chat": {
+        "fp": 0,
+        "n": 7
+      }
+    },
+    "errors": 0,
+    "skipped": 2
+  },
+  "results": [
+    {
+      "name": "bing",
+      "kind": "negative",
+      "stages": {
+        "fp_input": false,
+        "fp_chat": false,
+        "top_input_score": 1.72,
+        "chat_confidence": 0
+      },
+      "error": null
+    },
+    {
+      "name": "bootstrap-forms",
+      "kind": "negative",
+      "stages": {
+        "fp_input": true,
+        "fp_chat": false,
+        "top_input_score": 5.88,
+        "chat_confidence": 0
+      },
+      "error": null
+    },
+    {
+      "name": "chatgpt",
+      "kind": "chat",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "send_top1": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": true,
+        "messages": false
+      }
+    },
+    {
+      "name": "crisp",
+      "kind": "widget",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": false,
+        "messages": false
+      }
+    },
+    {
+      "name": "github",
+      "kind": "negative",
+      "stages": {
+        "fp_input": false,
+        "fp_chat": false,
+        "top_input_score": 0,
+        "chat_confidence": 0
+      },
+      "error": null
+    },
+    {
+      "name": "google",
+      "kind": "negative",
+      "stages": {
+        "fp_input": false,
+        "fp_chat": false,
+        "top_input_score": 3.62,
+        "chat_confidence": 0
+      },
+      "error": null
+    },
+    {
+      "name": "grok",
+      "kind": "chat",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "send_top1": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": true,
+        "messages": false
+      }
+    },
+    {
+      "name": "hackernews",
+      "kind": "negative",
+      "stages": {
+        "fp_input": false,
+        "fp_chat": false,
+        "top_input_score": 3.56,
+        "chat_confidence": 0
+      },
+      "error": null
+    },
+    {
+      "name": "intercom",
+      "kind": "widget",
+      "stages": {},
+      "error": null,
+      "skipped": "no truth annotation (refine oracles + recapture)"
+    },
+    {
+      "name": "lmarena",
+      "kind": "chat",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "send_top1": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": true,
+        "messages": false
+      }
+    },
+    {
+      "name": "perplexity",
+      "kind": "chat",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "send_top1": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": true,
+        "messages": false
+      }
+    },
+    {
+      "name": "pi",
+      "kind": "chat",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "send_top1": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": true,
+        "messages": false
+      }
+    },
+    {
+      "name": "synthetic-chat",
+      "kind": "chat",
+      "stages": {
+        "input_top1": true,
+        "input_gate": true,
+        "input_top5": true,
+        "send_top1": true,
+        "container_top1": true,
+        "input_pipeline": true,
+        "ml_used": false
+      },
+      "error": null,
+      "hasTruth": {
+        "input": true,
+        "send": true,
+        "messages": true
+      }
+    },
+    {
+      "name": "synthetic-search",
+      "kind": "negative",
+      "stages": {
+        "fp_input": false,
+        "fp_chat": false,
+        "top_input_score": 1.45,
+        "chat_confidence": 0
+      },
+      "error": null
+    },
+    {
+      "name": "tidio",
+      "kind": "widget",
+      "stages": {},
+      "error": null,
+      "skipped": "no truth annotation (refine oracles + recapture)"
+    },
+    {
+      "name": "wikipedia",
+      "kind": "negative",
+      "stages": {
+        "fp_input": false,
+        "fp_chat": false,
+        "top_input_score": 1.33,
+        "chat_confidence": 0
+      },
+      "error": null
+    }
+  ]
+}

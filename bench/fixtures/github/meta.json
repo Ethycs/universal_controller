@@ -1,0 +1,335 @@
+{
+  "name": "github",
+  "url": "https://github.com",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:10:48.740990+00:00",
+  "final_url": "https://github.com/",
+  "truth": {
+    "input": [],
+    "send": [],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "github",
+    "url": "https://github.com",
+    "kind": "negative",
+    "truth_input": [],
+    "truth_send": [],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Search + marketing forms."
+  },
+  "probe": [
+    {
+      "url": "https://github.com/",
+      "title": "GitHub \u00b7 Change is constant. GitHub keeps you ahead. \u00b7 GitHub",
+      "inputs": [],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "NavDropdown-module__button__PEHWX",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "NavDropdown-module__button__PEHWX",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "NavDropdown-module__button__PEHWX",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "NavDropdown-module__button__PEHWX",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "NavDropdown-module__button__PEHWX",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Primer_Brand__Button-module__Button___scH9Z Primer_Brand__Button-module__Button-",
+          "placeholder": null,
+          "ariaLabel": "Search or jump to, type / to search",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Primer_Brand__Button-module__Button___scH9Z Primer_Brand__Button-module__Button-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "PlayButton ",
+          "placeholder": null,
+          "ariaLabel": "Pause",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button Toggle-button--selected",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Primer_Brand__LogoSuite-module__LogoSuite__logobar-playPauseButton___KDfie",
+          "placeholder": null,
+          "ariaLabel": "Pause animation",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "PlayButton ",
+          "placeholder": null,
+          "ariaLabel": "Pause video",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "lp-AccordionDisclosure",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button Toggle-button--selected",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Toggle-button ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "Primer_Brand__Button-module__Button___scH9Z Primer_Brand__Button-module__Button-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "SubFooter-module__legalLink__Y0jbc",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "SubFooter-module__legalLink__Y0jbc",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "_R_ad_-button",
+          "cls": "Primer_Brand__Button-module__Button___scH9Z Primer_Brand__Button-module__Button-",
+          "placeholder": null,
+          "ariaLabel": "English - Select language",
+          "testid": "ActionMenu-button",
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

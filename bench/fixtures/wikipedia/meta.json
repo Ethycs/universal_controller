@@ -1,0 +1,285 @@
+{
+  "name": "wikipedia",
+  "url": "https://en.wikipedia.org/wiki/Web_browser",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:10:22.553868+00:00",
+  "final_url": "https://en.wikipedia.org/wiki/Web_browser",
+  "truth": {
+    "input": [],
+    "send": [],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Web_browser",
+    "kind": "negative",
+    "truth_input": [],
+    "truth_send": [],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Article page with a search field."
+  },
+  "probe": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "title": "Web browser - Wikipedia",
+      "inputs": [],
+      "buttons": [
+        {
+          "tag": "INPUT",
+          "id": "vector-main-menu-dropdown-checkbox",
+          "cls": "vector-dropdown-checkbox ",
+          "placeholder": null,
+          "ariaLabel": "Main menu",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "vector-pinnable-header-toggle-button vector-pinnable-header-pin-button",
+          "placeholder": null,
+          "ariaLabel": "Move Main menu to sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "cdx-button cdx-search-input__end-button",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "vector-pinnable-header-toggle-button vector-pinnable-header-unpin-button",
+          "placeholder": null,
+          "ariaLabel": "Hide Contents",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "cdx-button cdx-button--weight-quiet cdx-button--icon-only vector-toc-toggle",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "cdx-button cdx-button--weight-quiet cdx-button--icon-only vector-toc-toggle",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "p-lang-btn-checkbox",
+          "cls": "vector-dropdown-checkbox mw-interlanguage-selector",
+          "placeholder": null,
+          "ariaLabel": "145 languages",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "vector-page-tools-dropdown-checkbox",
+          "cls": "vector-dropdown-checkbox ",
+          "placeholder": null,
+          "ariaLabel": "Tools",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "vector-pinnable-header-toggle-button vector-pinnable-header-pin-button",
+          "placeholder": null,
+          "ariaLabel": "Move Tools to sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "vector-pinnable-header-toggle-button vector-pinnable-header-unpin-button",
+          "placeholder": null,
+          "ariaLabel": "Hide Appearance",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "mw-tmh-play",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "mw-collapsible-toggle mw-collapsible-toggle-default mw-collapsible-toggle-collap",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

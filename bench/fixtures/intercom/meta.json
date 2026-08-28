@@ -1,0 +1,399 @@
+{
+  "name": "intercom",
+  "url": "https://www.intercom.com",
+  "kind": "widget",
+  "captured_at": "2026-08-28T03:18:07.165696+00:00",
+  "final_url": "https://www.intercom.com/",
+  "truth": {
+    "input": [
+      "textarea",
+      "[contenteditable=\"true\"]"
+    ],
+    "send": [
+      "button[aria-label*=\"Send\" i]"
+    ],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [
+    "iframe[name=\"intercom-launcher-frame\"]"
+  ],
+  "site": {
+    "name": "intercom",
+    "url": "https://www.intercom.com",
+    "kind": "widget",
+    "truth_input": [
+      "textarea",
+      "[contenteditable=\"true\"]"
+    ],
+    "truth_send": [
+      "button[aria-label*=\"Send\" i]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [
+      "[aria-label*=\"Open Intercom\" i]",
+      ".intercom-launcher",
+      "iframe[name=\"intercom-launcher-frame\"]"
+    ],
+    "wait_ms": 15000,
+    "login_required": false,
+    "notes": ""
+  },
+  "probe": [
+    {
+      "url": "https://www.intercom.com/",
+      "title": "Intercom | A complete system for human and AI customer service",
+      "inputs": [],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "h-full p-2 px-2 pointer-events-auto flex cursor-pointer items-center justify-cen",
+          "placeholder": null,
+          "ariaLabel": "Close banner",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "flex items-center gap-1 whitespace-nowrap rounded-md hover:bg-[var(--nav-hover,v",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "flex items-center gap-1 whitespace-nowrap rounded-md hover:bg-[var(--nav-hover,v",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit m-0 inline-flex select-none items-center justify-center focus-visib",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "duration-400 ease-out-quart relative inline-flex cursor-pointer items-center jus",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 data-sele",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 data-sele",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 data-sele",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "focus-visible:outline-2 focus-visible:outline-offset-2 data-selected:bg-black/3 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "focus-visible:outline-2 focus-visible:outline-offset-2 data-selected:bg-black/3 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "focus-visible:outline-2 focus-visible:outline-offset-2 data-selected:bg-black/3 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "relative overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "base-ui-_R_1rractbsnpiv5u8db_",
+          "cls": "inline-flex",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "font-inherit h-(--button-height) rounded-(--button-radius) px-(--button-padding-",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "base-ui-_R_3rqctbsnpiv5u8db_",
+          "cls": "inline-flex",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "url": "https://insight.adsrvr.org/track/cei?advertiser_id=ba38llw&cookie_sync=1&upv=3.0.0&upid=yg9k68y&ref=https%3A%2F%2Fwww.intercom.com%2F",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://dsum-sec.casalemedia.com/rum?cm_dsp_id=39&external_user_id=7405f8ef-43aa-417a-b2f5-a10806df21d1&expiration=1790479068&gdpr=0&gdpr_consent=&C=1",
+      "title": "rum (1\u00d71)",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://match.adsrvr.org/track/cmf/google?g_uuid=&gdpr=0&gdpr_consent=&ttd_tdid=7405f8ef-43aa-417a-b2f5-a10806df21d1&google_error=15",
+      "title": "google (1\u00d71)",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://match.adsrvr.org/track/cmf/appnexus?ttd=1&anid=3871567797009765545&ttd_tdid=7405f8ef-43aa-417a-b2f5-a10806df21d1",
+      "title": "appnexus (1\u00d71)",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://15045323.fls.doubleclick.net/activityi;dc_pre=CITCk62uwpYDFaMBCAIdxOktxg;src=15045323;type=lpvsc0;cat=monks0;rcb=8;ord=7710509174128;npa=0;auiddc=358692611.1787886585;u1=https%3A%2F%2Fwww.intercom.com%2F;u2=%2F;u3=undefined;u4=;u5=undefined;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;gdid=dYWJhMj;uaa=x86;uab=64;uafvl=Not%252FA)Brand%3B99.0.0.0%7CChromium%3B148.0.7778.96;uamb=0;uam=;uap=Windows;uapv=19.0.0;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68q1v9200561601z879446940za20gzb79446940zd79446940xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938469~118897920~118897930~119367802~119367810~120213116~120385423~120670644;epver=2;dc_random=1787887038_bCrgrPU-gpVU9AtabmwwF5SVezzyh8usGw;_dc_test=1;~oref=https%3A%2F%2Fwww.intercom.com%2F?",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://15045323.fls.doubleclick.net/activityi;dc_pre=CNK6k62uwpYDFWrQSQAdklIljQ;src=15045323;type=lpvsc0;cat=monks006;rcb=8;ord=1;num=5946626520387;npa=0;auiddc=358692611.1787886585;u1=https%3A%2F%2Fwww.intercom.com%2F;u2=%2F;u3=undefined;u5=undefined;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;gdid=dYWJhMj;uaa=x86;uab=64;uafvl=Not%252FA)Brand%3B99.0.0.0%7CChromium%3B148.0.7778.96;uamb=0;uam=;uap=Windows;uapv=19.0.0;uaw=0;pscdl=noapi;frm=0;_tu=KJA;gtm=45fe68q1v9200561601z879446940za20gzb79446940zd79446940xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938469~118897920~118897930~119367802~119367810~120213116~120385423~120670644;epver=2;dc_random=1787887038_ihp-SywWq5NH_AcwK5FsgErK_O0ZjJTR0Q;_dc_test=1;~oref=https%3A%2F%2Fwww.intercom.com%2F?",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://analytics.o11.tech/a/ts_.htm?ver=1.2087.264&cid=c076#cdmn=analytics.o11.tech&lm=e&tt=tcs.dhj&aqet=pv&pubid=f5e07d5fd7d31a10a696c1975f04a02b&evid=bf1a0889-847b-4f2c-94c2-67574858d019&dmn=www.intercom.com&cid=c076&lbl=c076&flbl=pxcel&ll=e&ver=1.2087.264&ell=e&cck=_autid&pn=%2F&qs=na&rdn=www.intercom.com&rpn=%2F&rqs=na&ipaddr=MjE2LjM4LjE1Ny40Mg%3D%3D&cc=US&cont=NA&rc=CA",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    },
+    {
+      "url": "https://15045323.fls.doubleclick.net/activityi;dc_pre=CPye0bGuwpYDFeU9CAIdSrEa5w;src=15045323;type=conv00;cat=monks006;rcb=8;ord=1032872349786;npa=0;auiddc=358692611.1787886585;u1=https%3A%2F%2Fwww.intercom.com%2F;u2=%2F;u3=undefined;u4=;u5=undefined;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;gdid=dYWJhMj;uaa=x86;uab=64;uafvl=Not%252FA)Brand%3B99.0.0.0%7CChromium%3B148.0.7778.96;uamb=0;uam=;uap=Windows;uapv=19.0.0;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68q1v9200561601z879446940za20gzb79446940zd79446940xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938469~118897920~118897930~119367802~119367810~120213116~120385423~120670644;epver=2;dc_random=1787887048_vnvnAVeCX3o2n8UvMNHVZD9zW5AkHu46-A;_dc_test=1;~oref=https%3A%2F%2Fwww.intercom.com%2F?",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    }
+  ]
+}

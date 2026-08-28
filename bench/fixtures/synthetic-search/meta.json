@@ -1,0 +1,9 @@
+{
+  "name": "synthetic-search",
+  "url": "synthetic://synthetic-search",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:07:24.528438+00:00",
+  "truth": {},
+  "resolved": {},
+  "synthetic": true
+}

@@ -1,0 +1,53 @@
+From: <Saved by Blink>
+Snapshot-Content-Location: about:blank
+Subject: Synthetic Chat
+Date: Thu, 27 Aug 2026 20:07:24 -0700
+MIME-Version: 1.0
+Content-Type: multipart/related;
+	type="text/html";
+	boundary="----MultipartBoundary--OuMHyJEzA9akNYikj8LEHv37JWjoX14fA4RCtKwU40----"
+
+
+------MultipartBoundary--OuMHyJEzA9akNYikj8LEHv37JWjoX14fA4RCtKwU40----
+Content-Type: text/html
+Content-ID: <frame-2789F5447171167EE329A05221ADCE7D@mhtml.blink>
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html><head><meta http-equiv=3D"Content-Type" content=3D"tex=
+t/html; charset=3DUTF-8"><link rel=3D"stylesheet" type=3D"text/css" href=3D=
+"cid:css-946afd8b-fb3b-4177-8437-3bc85f1eb5c9@mhtml.blink" /><title>Synthet=
+ic Chat</title></head>
+<body>
+  <div class=3D"chat-log" role=3D"log" aria-live=3D"polite" data-uc-truth=
+=3D"messages">
+    <div class=3D"msg">Hello, how can I help?</div>
+    <div class=3D"msg">Tell me about MHTML.</div>
+    <div class=3D"msg">MHTML is a web archive format.</div>
+  </div>
+  <div class=3D"composer">
+    <div contenteditable=3D"true" role=3D"textbox" aria-label=3D"Message in=
+put" data-uc-truth=3D"input"></div>
+    <button aria-label=3D"Send message" data-uc-truth=3D"send">Send</button=
+>
+  </div>
+</body></html>
+------MultipartBoundary--OuMHyJEzA9akNYikj8LEHv37JWjoX14fA4RCtKwU40----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: cid:css-946afd8b-fb3b-4177-8437-3bc85f1eb5c9@mhtml.blink
+
+@charset "utf-8";
+
+body { margin: 0px; font-family: sans-serif; }
+
+.chat-log { height: 400px; overflow-y: auto; border: 1px solid rgb(204, 204=
+, 204); }
+
+.msg { padding: 8px; margin: 4px; background: rgb(238, 238, 238); border-ra=
+dius: 8px; }
+
+.composer { position: fixed; bottom: 0px; width: 100%; display: flex; }
+
+.composer [contenteditable] { flex: 1 1 0%; border: 1px solid rgb(153, 153,=
+ 153); min-height: 40px; padding: 8px; }
+------MultipartBoundary--OuMHyJEzA9akNYikj8LEHv37JWjoX14fA4RCtKwU40------

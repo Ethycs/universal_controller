@@ -1,0 +1,45 @@
+{
+  "name": "hackernews",
+  "url": "https://news.ycombinator.com",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:10:29.850158+00:00",
+  "final_url": "https://news.ycombinator.com/",
+  "truth": {
+    "input": [],
+    "send": [],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "hackernews",
+    "url": "https://news.ycombinator.com",
+    "kind": "negative",
+    "truth_input": [],
+    "truth_send": [],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": ""
+  },
+  "probe": [
+    {
+      "url": "https://news.ycombinator.com/",
+      "title": "Hacker News",
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ],
+      "buttons": []
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "synthetic-chat",
+  "url": "synthetic://synthetic-chat",
+  "kind": "chat",
+  "captured_at": "2026-08-28T03:07:24.329744+00:00",
+  "truth": {
+    "input": [
+      "[data-uc-truth=\"input\"]"
+    ],
+    "send": [
+      "[data-uc-truth=\"send\"]"
+    ],
+    "messages": [
+      "[data-uc-truth=\"messages\"]"
+    ]
+  },
+  "resolved": {},
+  "synthetic": true
+}

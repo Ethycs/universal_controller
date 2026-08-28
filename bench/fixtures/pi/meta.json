@@ -1,0 +1,171 @@
+{
+  "name": "pi",
+  "url": "https://pi.ai/talk",
+  "kind": "chat",
+  "captured_at": "2026-08-28T03:15:00.244143+00:00",
+  "final_url": "https://pi.ai/talk/NR8j7TPbg3tCQf5NYhTQJ",
+  "truth": {
+    "input": [
+      "textarea[placeholder*=\"Talk\" i]",
+      "input[placeholder=\"Preferred name\"]",
+      "main textarea"
+    ],
+    "send": [
+      "button[aria-label*=\"Submit\" i]",
+      "main form button",
+      "button[type=\"submit\"]"
+    ],
+    "messages": []
+  },
+  "resolved": {
+    "input": {
+      "selector": "input[placeholder=\"Preferred name\"]",
+      "tag": "INPUT",
+      "rect": {
+        "w": 528,
+        "h": 40
+      },
+      "frame": "https://pi.ai/talk/NR8j7TPbg3tCQf5NYhTQJ"
+    },
+    "send": {
+      "selector": "button[aria-label*=\"Submit\" i]",
+      "tag": "BUTTON",
+      "rect": {
+        "w": 40,
+        "h": 40
+      },
+      "frame": "https://pi.ai/talk/NR8j7TPbg3tCQf5NYhTQJ"
+    }
+  },
+  "pre_clicks_done": [],
+  "site": {
+    "name": "pi",
+    "url": "https://pi.ai/talk",
+    "kind": "chat",
+    "truth_input": [
+      "textarea[placeholder*=\"Talk\" i]",
+      "input[placeholder=\"Preferred name\"]",
+      "main textarea"
+    ],
+    "truth_send": [
+      "button[aria-label*=\"Submit\" i]",
+      "main form button",
+      "button[type=\"submit\"]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Logged out shows onboarding, which IS a chat: Pi asks your name, the composer input answers it. Valid truth."
+  },
+  "probe": [
+    {
+      "url": "https://pi.ai/talk/NR8j7TPbg3tCQf5NYhTQJ",
+      "title": "Pi, your personal AI",
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "w-full rounded-10 border border-solid px-4 !outline-none !ring-0 transition-colo",
+          "placeholder": "Preferred name",
+          "ariaLabel": "What should Pi call you?",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "group flex w-full cursor-pointer items-center justify-between rounded-lg md:w-fi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center transition-colors focus-visible:outline-",
+          "placeholder": null,
+          "ariaLabel": "Toggle sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "flex items-center rounded-[0.625rem] transition-colors focus-visible:outline-non",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex cursor-pointer items-center transition-colors focus-visible:outline-",
+          "placeholder": null,
+          "ariaLabel": "Help & feedback",
+          "testid": "nav-help-feedback",
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center whitespace-nowrap transition-colors focu",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center transition-colors focus-visible:outline-",
+          "placeholder": null,
+          "ariaLabel": "Chat options",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center whitespace-nowrap transition-colors focu",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": "anon-cta-login-desktop",
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center whitespace-nowrap transition-colors focu",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": "anon-cta-signup-desktop",
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center transition-colors focus-visible:outline-",
+          "placeholder": null,
+          "ariaLabel": "Submit name",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,331 @@
+{
+  "name": "lmarena",
+  "url": "https://lmarena.ai",
+  "kind": "chat",
+  "captured_at": "2026-08-28T03:09:04.662995+00:00",
+  "final_url": "https://arena.ai/",
+  "truth": {
+    "input": [
+      "textarea"
+    ],
+    "send": [
+      "button[type=\"submit\"]",
+      "button[aria-label*=\"Send\" i]"
+    ],
+    "messages": []
+  },
+  "resolved": {
+    "input": {
+      "selector": "textarea",
+      "tag": "TEXTAREA",
+      "rect": {
+        "w": 654,
+        "h": 80
+      },
+      "frame": "https://arena.ai/"
+    },
+    "send": {
+      "selector": "button[type=\"submit\"]",
+      "tag": "BUTTON",
+      "rect": {
+        "w": 32,
+        "h": 32
+      },
+      "frame": "https://arena.ai/"
+    }
+  },
+  "pre_clicks_done": [],
+  "site": {
+    "name": "lmarena",
+    "url": "https://lmarena.ai",
+    "kind": "chat",
+    "truth_input": [
+      "textarea"
+    ],
+    "truth_send": [
+      "button[type=\"submit\"]",
+      "button[aria-label*=\"Send\" i]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": ""
+  },
+  "probe": [
+    {
+      "url": "https://arena.ai/",
+      "title": "Arena AI: The Official AI Ranking & LLM Leaderboard",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": null,
+          "cls": "box-border w-full flex-none resize-none focus:outline-none active:outline-none p",
+          "placeholder": "Ask anything\u2026",
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "TEXTAREA",
+          "id": null,
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "TEXTAREA",
+          "id": "g-recaptcha-response-100000",
+          "cls": "g-recaptcha-response",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": false
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[4px] fo",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[4px] fo",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[4px] te",
+          "placeholder": null,
+          "ariaLabel": "Dismiss banner",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "hover:after:bg-sidebar-border absolute inset-y-0 z-50 hidden w-4 -translate-x-1/",
+          "placeholder": null,
+          "ariaLabel": "Toggle Sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "group/toggle-btn hover:bg-sidebar-accent flex size-8 items-center justify-center",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "hover:after:bg-sidebar-border flex-1 cursor-e-resize transition-all ease-linear ",
+          "placeholder": null,
+          "ariaLabel": "Expand sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "p-2",
+          "placeholder": null,
+          "ariaLabel": "Privacy and legal",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border text-header-secondary hover:text-header-primary data-[state=open]:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "text-text-secondary bg-surface-raised-alt hover:bg-surface-raised-tertiary hover",
+          "placeholder": null,
+          "ariaLabel": "Dismiss image edit promotion",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border-medium bg-surface-primary hover:bg-surface-tertiary focus-visible:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border-medium bg-surface-primary hover:bg-surface-tertiary focus-visible:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border-medium bg-surface-primary hover:bg-surface-tertiary focus-visible:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border-medium bg-surface-primary hover:bg-surface-tertiary focus-visible:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border-medium bg-surface-primary hover:bg-surface-tertiary focus-visible:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "border-border-medium bg-surface-primary hover:bg-surface-tertiary focus-visible:",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm focus-vi",
+          "placeholder": null,
+          "ariaLabel": "Add files and more",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm focus-vi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm focus-vi",
+          "placeholder": null,
+          "ariaLabel": "Code",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm focus-vi",
+          "placeholder": null,
+          "ariaLabel": "Search",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm focus-vi",
+          "placeholder": null,
+          "ariaLabel": "Image",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm focus-vi",
+          "placeholder": null,
+          "ariaLabel": "Video",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "text-interactive-normal hover:text-interactive-active focus-visible:text-interac",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm transiti",
+          "placeholder": null,
+          "ariaLabel": "Send message",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "url": "https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6LeTGMcsAAAAALuIlkVwIxaAuZA8VledA6d3Nnb0&co=aHR0cHM6Ly9hcmVuYS5haTo0NDM.&hl=en&v=xg_pWYS8-HRESiV6Rdg4aY_R&size=invisible&anchor-ms=20000&execute-ms=30000&cb=qhh7zh1zvnk7",
+      "title": "reCAPTCHA",
+      "inputs": [],
+      "buttons": []
+    }
+  ]
+}

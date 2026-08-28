@@ -1,0 +1,39 @@
+From: <Saved by Blink>
+Snapshot-Content-Location: about:blank
+Subject: Synthetic Search
+Date: Thu, 27 Aug 2026 20:07:24 -0700
+MIME-Version: 1.0
+Content-Type: multipart/related;
+	type="text/html";
+	boundary="----MultipartBoundary--TAwa9hK5ZMQRmpWE7NGRmNJxhMtkv9ArKpgnfIm6mU----"
+
+
+------MultipartBoundary--TAwa9hK5ZMQRmpWE7NGRmNJxhMtkv9ArKpgnfIm6mU----
+Content-Type: text/html
+Content-ID: <frame-DA74BC01141D201404F8B28634ABF970@mhtml.blink>
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html><head><meta http-equiv=3D"Content-Type" content=3D"tex=
+t/html; charset=3DUTF-8"><link rel=3D"stylesheet" type=3D"text/css" href=3D=
+"cid:css-f2bcc00e-af1a-4552-9bb5-cdc2f97acd5a@mhtml.blink" /><title>Synthet=
+ic Search</title></head>
+<body>
+  <h1>FindStuff</h1>
+  <form role=3D"search" action=3D"">
+    <input type=3D"text" name=3D"q" placeholder=3D"Search the web" aria-lab=
+el=3D"Search">
+    <button type=3D"submit">Search</button>
+  </form>
+  <p><a href=3D"">About</a> =C2=B7 <a href=3D"">Images</a></p>
+</body></html>
+------MultipartBoundary--TAwa9hK5ZMQRmpWE7NGRmNJxhMtkv9ArKpgnfIm6mU----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: cid:css-f2bcc00e-af1a-4552-9bb5-cdc2f97acd5a@mhtml.blink
+
+@charset "utf-8";
+
+body { font-family: sans-serif; text-align: center; padding-top: 120px; }
+
+input { width: 400px; padding: 10px; }
+------MultipartBoundary--TAwa9hK5ZMQRmpWE7NGRmNJxhMtkv9ArKpgnfIm6mU------

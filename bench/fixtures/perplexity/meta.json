@@ -1,0 +1,295 @@
+{
+  "name": "perplexity",
+  "url": "https://www.perplexity.ai",
+  "kind": "chat",
+  "captured_at": "2026-08-28T03:15:14.273386+00:00",
+  "final_url": "https://www.perplexity.ai/",
+  "truth": {
+    "input": [
+      "[contenteditable=\"true\"][role=\"textbox\"]",
+      "textarea[placeholder*=\"Ask\" i]",
+      "div.ProseMirror"
+    ],
+    "send": [
+      "button[data-testid=\"submit-button\"]",
+      "button[aria-label*=\"Submit\" i]"
+    ],
+    "messages": []
+  },
+  "resolved": {
+    "input": {
+      "selector": "[contenteditable=\"true\"][role=\"textbox\"]",
+      "tag": "DIV",
+      "rect": {
+        "w": 606,
+        "h": 52
+      },
+      "frame": "https://www.perplexity.ai/"
+    },
+    "send": {
+      "selector": "button[aria-label*=\"Submit\" i]",
+      "tag": "BUTTON",
+      "rect": {
+        "w": 32,
+        "h": 32
+      },
+      "frame": "https://www.perplexity.ai/"
+    }
+  },
+  "pre_clicks_done": [],
+  "site": {
+    "name": "perplexity",
+    "url": "https://www.perplexity.ai",
+    "kind": "chat",
+    "truth_input": [
+      "[contenteditable=\"true\"][role=\"textbox\"]",
+      "textarea[placeholder*=\"Ask\" i]",
+      "div.ProseMirror"
+    ],
+    "truth_send": [
+      "button[data-testid=\"submit-button\"]",
+      "button[aria-label*=\"Submit\" i]"
+    ],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Cloudflare \u2014 capture headful."
+  },
+  "probe": [
+    {
+      "url": "https://www.perplexity.ai/",
+      "title": "Perplexity",
+      "inputs": [
+        {
+          "tag": "DIV",
+          "id": "ask-input",
+          "cls": "overflow-auto max-h-[45vh] lg:max-h-[40vh] sm:max-h-[25vh] outline-none font-san",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": true,
+          "visible": true
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable flex items-center justify-center rounded-xl hover:bg-subtle s",
+          "placeholder": null,
+          "ariaLabel": "Collapse sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt size-6 grid place-items-center rounded-md shrink-0 text-t",
+          "placeholder": null,
+          "ariaLabel": "Create project",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt size-6 grid place-items-center rounded-md shrink-0 text-t",
+          "placeholder": null,
+          "ariaLabel": "Filter projects",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt size-6 grid place-items-center rounded-md shrink-0 text-t",
+          "placeholder": null,
+          "ariaLabel": "Collapse Projects",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt size-6 grid place-items-center rounded-md shrink-0 text-t",
+          "placeholder": null,
+          "ariaLabel": "Collapse Sessions",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": "Use incognito: create anonymous sessions that aren't saved to your history and expire after 24 hours",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": "Apps and more",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt select-none [-webkit-user-drag:none] outline-hidden font-",
+          "placeholder": null,
+          "ariaLabel": "Add files or tools",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "radix-_r_u_",
+          "cls": "reset interactable-alt inline-flex select-none max-w-full items-center border tr",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt inline-flex select-none max-w-full items-center border tr",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": "Model",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": "Dictation",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": "Submit",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt group relative flex h-full w-full min-w-0 flex-col gap-1 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable-alt group relative flex h-full w-full min-w-0 flex-col gap-1 ",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": "Close",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable pointer-events-none select-none [-webkit-user-drag:none] outl",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "reset interactable select-none [-webkit-user-drag:none] outline-hidden font-medi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "url": "https://count.perplexity.ai/bs#68e0bce4-d314-44f4-b460-26dbc67be1c7",
+      "title": "",
+      "inputs": [],
+      "buttons": []
+    }
+  ]
+}

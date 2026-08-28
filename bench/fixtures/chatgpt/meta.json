@@ -1,0 +1,217 @@
+{
+  "name": "chatgpt",
+  "url": "https://chatgpt.com",
+  "kind": "chat",
+  "captured_at": "2026-08-28T03:14:51.973371+00:00",
+  "final_url": "https://chatgpt.com/",
+  "truth": {
+    "input": [
+      "#prompt-textarea",
+      "#mobile-composer-prompt",
+      "textarea[placeholder*=\"Ask ChatGPT\" i]",
+      "div.ProseMirror[contenteditable=\"true\"]"
+    ],
+    "send": [
+      "button[data-testid=\"send-button\"]",
+      "#composer-submit-button",
+      "button[aria-label*=\"Send\" i]"
+    ],
+    "messages": [
+      "[data-testid^=\"conversation-turn\"]"
+    ]
+  },
+  "resolved": {
+    "input": {
+      "selector": "#mobile-composer-prompt",
+      "tag": "TEXTAREA",
+      "rect": {
+        "w": 614,
+        "h": 24
+      },
+      "frame": "https://chatgpt.com/"
+    },
+    "send": {
+      "selector": "button[aria-label*=\"Send\" i]",
+      "tag": "BUTTON",
+      "rect": {
+        "w": 44,
+        "h": 44
+      },
+      "frame": "https://chatgpt.com/"
+    }
+  },
+  "pre_clicks_done": [],
+  "site": {
+    "name": "chatgpt",
+    "url": "https://chatgpt.com",
+    "kind": "chat",
+    "truth_input": [
+      "#prompt-textarea",
+      "#mobile-composer-prompt",
+      "textarea[placeholder*=\"Ask ChatGPT\" i]",
+      "div.ProseMirror[contenteditable=\"true\"]"
+    ],
+    "truth_send": [
+      "button[data-testid=\"send-button\"]",
+      "#composer-submit-button",
+      "button[aria-label*=\"Send\" i]"
+    ],
+    "truth_messages": [
+      "[data-testid^=\"conversation-turn\"]"
+    ],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Usable logged out; Cloudflare \u2014 capture headful."
+  },
+  "probe": [
+    {
+      "url": "https://chatgpt.com/",
+      "title": "ChatGPT: Chat, Work, Create & Code with AI",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": "mobile-composer-prompt",
+          "cls": "wm-composer-textarea",
+          "placeholder": "Ask ChatGPT",
+          "ariaLabel": "Chat with ChatGPT",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--ghost wm-button--radius-medium wm-sidebar",
+          "placeholder": null,
+          "ariaLabel": "Close sidebar",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--ghost wm-button--radius-full wm-sidebar-n",
+          "placeholder": null,
+          "ariaLabel": "Search chats",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--ghost wm-button--radius-full wm-sidebar-n",
+          "placeholder": null,
+          "ariaLabel": "Deep research",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--ghost wm-button--radius-full wm-sidebar-n",
+          "placeholder": null,
+          "ariaLabel": "Settings",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--secondary wm-button--radius-full wm-sideb",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "SPAN",
+          "id": null,
+          "cls": "wm-app-headerWordmark wm-app-headerProductTrigger",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--primary wm-button--radius-full wm-app-log",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--secondary wm-button--radius-full wm-app-s",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--secondary wm-button--radius-full wm-app-s",
+          "placeholder": null,
+          "ariaLabel": "Scroll to bottom",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--ghost wm-button--radius-full wm-composer-",
+          "placeholder": null,
+          "ariaLabel": "Add files and more",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--ghost wm-button--radius-full wm-composer-",
+          "placeholder": null,
+          "ariaLabel": "Start dictation",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "wm-button wm-button--medium wm-button--primary wm-button--radius-full wm-compose",
+          "placeholder": null,
+          "ariaLabel": "Send message",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": "t",
+          "cls": "wm-button wm-button--medium wm-button--secondary wm-button--radius-full wm-app-e",
+          "placeholder": null,
+          "ariaLabel": "What can you do?",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

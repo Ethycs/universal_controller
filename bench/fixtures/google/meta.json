@@ -1,0 +1,146 @@
+{
+  "name": "google",
+  "url": "https://www.google.com",
+  "kind": "negative",
+  "captured_at": "2026-08-28T03:10:01.344984+00:00",
+  "final_url": "https://www.google.com/?zx=1787886594212",
+  "truth": {
+    "input": [],
+    "send": [],
+    "messages": []
+  },
+  "resolved": {},
+  "pre_clicks_done": [],
+  "site": {
+    "name": "google",
+    "url": "https://www.google.com",
+    "kind": "negative",
+    "truth_input": [],
+    "truth_send": [],
+    "truth_messages": [],
+    "pre_clicks": [],
+    "wait_ms": 6000,
+    "login_required": false,
+    "notes": "Search box. Engaging chat here is a false positive."
+  },
+  "probe": [
+    {
+      "url": "https://www.google.com/?zx=1787886594212",
+      "title": "Google",
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "id": "ti6dpd",
+          "cls": "gLFyf",
+          "placeholder": null,
+          "ariaLabel": "Search",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "TEXTAREA",
+          "id": null,
+          "cls": "csi",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": false
+        }
+      ],
+      "buttons": [
+        {
+          "tag": "A",
+          "id": null,
+          "cls": "gb_C",
+          "placeholder": null,
+          "ariaLabel": "Google apps",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": "Share",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "UbbAWe",
+          "placeholder": null,
+          "ariaLabel": "Add files and tools",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "fzj3ad",
+          "placeholder": null,
+          "ariaLabel": "Search by voice",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "etxtjc",
+          "placeholder": null,
+          "ariaLabel": "Search by image",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "BUTTON",
+          "id": null,
+          "cls": "plR5qb",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": null,
+          "cls": "gNO89b",
+          "placeholder": null,
+          "ariaLabel": "Google Search",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "INPUT",
+          "id": "gbqfbb",
+          "cls": null,
+          "placeholder": null,
+          "ariaLabel": "I'm Feeling Lucky",
+          "testid": null,
+          "ce": null,
+          "visible": true
+        },
+        {
+          "tag": "DIV",
+          "id": null,
+          "cls": "CcNe6e",
+          "placeholder": null,
+          "ariaLabel": null,
+          "testid": null,
+          "ce": null,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}
