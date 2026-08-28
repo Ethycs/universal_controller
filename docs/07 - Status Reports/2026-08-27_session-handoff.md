@@ -1,7 +1,7 @@
 # Session Handoff — bench, registry/health/status stack, litellm generic driver
 
-**Date**: 2026-08-27 **Status**: 🟡 IN FLIGHT
-**Scope**: `universal_controller` repo — **everything below is UNCOMMITTED in the working tree.** `git status` will show it all. Nothing from this session has landed in a commit; treat the tree, not the log, as the source of truth until a commit decision is made.
+**Date**: 2026-08-27 **Status**: ✅ LANDED
+**Scope**: `universal_controller` repo — **committed 2026-08-27** as the series `43db2ac` (bench) → `36d16d5` (availability stack + generic driver) → `04d9093` (Signature Lab v1) → `5d22578` (docs tree) → `1e96815` (chore). The log is the source of truth; an earlier revision of this doc said UNCOMMITTED — that was true when written, reconciled after the commits landed.
 
 ## 1. What this session did (chronological)
 
