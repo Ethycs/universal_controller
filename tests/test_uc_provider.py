@@ -169,11 +169,43 @@ def test_completion_uses_last_user_message_and_returns_modelresponse(handler, fa
 def test_completion_unsupported_model_raises_bad_request(handler):
     with pytest.raises(litellm.exceptions.BadRequestError):
         handler.completion(
-            model="chatgpt",  # not in SUPPORTED_MODELS
+            # Neither adapter-backed nor a registry site with a generic
+            # litellm model.
+            model="definitely-not-a-site",
             messages=[{"role": "user", "content": "hi"}],
             model_response=_fresh_model_response(),
             optional_params={},
         )
+
+
+def test_completion_generic_site_routes_through_generic_client(handler, monkeypatch):
+    """Registry sites advertised as uc/<name> (e.g. chatgpt) dispatch to
+    the generic engine client, not the Grok adapter."""
+    from uc_browser.sites import generic as generic_mod
+
+    # Isolate from whatever live health data this machine has.
+    monkeypatch.setenv("UC_AVAILABILITY_GATE", "0")
+
+    fake = MagicMock()
+    fake.send.return_value = {
+        "response": "generic hello",
+        "site": "chatgpt",
+        "page_url": "https://chatgpt.com/",
+    }
+    with patch.object(generic_mod, "_client", fake), \
+         patch.object(generic_mod, "get_generic_client", return_value=fake):
+        out = handler.completion(
+            model="chatgpt",
+            messages=[{"role": "user", "content": "hi"}],
+            model_response=_fresh_model_response(),
+            optional_params={"extra_body": {"session_id": "g-1"}},
+        )
+    fake.send.assert_called_once()
+    args, kwargs = fake.send.call_args
+    assert args[0] == "chatgpt" and args[1] == "https://chatgpt.com"
+    assert kwargs["session_key"] == "g-1"
+    assert out.choices[0].message.content == "generic hello"
+    assert out.model == "uc/chatgpt"
 
 
 def test_streaming_emits_full_text_then_done_chunk(handler, fake_grok):

@@ -57,6 +57,63 @@ SUPPORTED_MODELS: set[str] = {"grok"}
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
+def _generic_site_entry(site: str):
+    """Registry entry for ``site`` when it's advertised as a generic
+    litellm model (litellm_model == 'uc/<site>' without an adapter)."""
+    try:
+        from uc_browser.registry import get_registry
+
+        entry = get_registry().get(site)
+        if entry is not None and entry.litellm_model == f"{PROVIDER}/{site}":
+            return entry
+    except Exception:  # pragma: no cover — registry must never break routing
+        logger.debug("generic-site lookup failed for %r", site, exc_info=True)
+    return None
+
+
+def _check_availability(site: str, model: str, optional_params: dict) -> None:
+    """Fail fast when the health monitor says the site is down.
+
+    Reads ``data/health/latest.json`` (written by uc_browser.health).
+    Graceful by design: no health data, stale data, or an unreadable file
+    all mean "no opinion" — the request proceeds. Disable entirely with
+    ``UC_AVAILABILITY_GATE=0``, or per-request with
+    ``extra_body={"ignore_availability": true}``.
+    """
+    if os.environ.get("UC_AVAILABILITY_GATE", "1") == "0":
+        return
+    if _from_extras(optional_params, "ignore_availability"):
+        return
+    try:
+        from uc_browser.health import STATUS_DOWN, STATUS_LOGIN, HealthStore
+        from uc_browser.registry import get_registry
+
+        entry = get_registry().get(site)
+        rec = HealthStore().latest(site)
+        if not entry or not rec:
+            return
+        age = time.time() - rec.get("at", 0)
+        if age > 2 * entry.probe_interval_s:
+            return  # stale — no opinion
+        if rec.get("status") in (STATUS_DOWN, STATUS_LOGIN):
+            raise litellm.exceptions.ServiceUnavailableError(
+                message=(
+                    f"UCBrowserCustomLLM: site {site!r} is currently "
+                    f"{rec['status']} (probed {int(age)}s ago: "
+                    f"{rec.get('detail', '')}). Check GET /uc/availability, "
+                    "or pass extra_body={'ignore_availability': true} to "
+                    "try anyway."
+                ),
+                model=model,
+                llm_provider=PROVIDER,
+            )
+    except litellm.exceptions.ServiceUnavailableError:
+        raise
+    except Exception:  # pragma: no cover — the gate must never break sends
+        logger.debug("availability gate check failed; allowing request",
+                     exc_info=True)
+
+
 def _last_user_message(messages: list[dict]) -> str:
     """Return the text of the most recent ``role=user`` message."""
     for msg in reversed(messages or []):
@@ -166,6 +223,33 @@ class UCBrowserCustomLLM(CustomLLM):
         self._browser_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="uc-grok-pw",
         )
+        # The generic engine gets its OWN pinned thread: only one sync
+        # Playwright instance can ever start per thread (the first one's
+        # event loop stays bound to it and the second start() dies with
+        # "sync API inside asyncio loop"), and GrokClient + GenericClient
+        # are two separate browser instances by design.
+        self._generic_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="uc-generic-pw",
+        )
+
+    @staticmethod
+    def _pin(executor: ThreadPoolExecutor, prefix: str, fn, *args, **kwargs):
+        """Run ``fn`` on the given single-worker executor (inline if we're
+        already on its thread). Sync Playwright objects are thread-affine,
+        and caller threads may carry litellm's leftover asyncio loop, so
+        every browser-touching call must hop to its pinned worker — in the
+        sync path too, not just the async ones."""
+        if threading.current_thread().name.startswith(prefix):
+            return fn(*args, **kwargs)
+        return executor.submit(fn, *args, **kwargs).result()
+
+    def _pin_to_browser_thread(self, fn, *args, **kwargs):
+        return self._pin(self._browser_executor, "uc-grok-pw",
+                         fn, *args, **kwargs)
+
+    def _pin_to_generic_thread(self, fn, *args, **kwargs):
+        return self._pin(self._generic_executor, "uc-generic-pw",
+                         fn, *args, **kwargs)
 
     # ── Session store (public for inspection / tests) ────────────────
 
@@ -201,14 +285,37 @@ class UCBrowserCustomLLM(CustomLLM):
         # litellm strips the ``uc/`` prefix before calling us; ``model``
         # here is just the site name (e.g. "grok").
         site = (model or "").strip().lower()
+        generic_entry = None
         if site not in SUPPORTED_MODELS:
-            raise litellm.exceptions.BadRequestError(
-                message=(
-                    f"UCBrowserCustomLLM: unsupported model {model!r}. "
-                    f"Supported: {sorted(SUPPORTED_MODELS)}."
-                ),
+            # Not adapter-backed — is it a registry site advertised as a
+            # generic litellm model? Those route through the generic
+            # engine (uc_browser.sites.generic) instead of a hand-tuned
+            # driver.
+            generic_entry = _generic_site_entry(site)
+            if generic_entry is None:
+                raise litellm.exceptions.BadRequestError(
+                    message=(
+                        f"UCBrowserCustomLLM: unsupported model {model!r}. "
+                        f"Adapter-backed: {sorted(SUPPORTED_MODELS)}; "
+                        "generic sites: registry entries with "
+                        f"litellm_model='uc/<name>' (see /uc/availability)."
+                    ),
+                    model=model,
+                    llm_provider=PROVIDER,
+                )
+
+        _check_availability(site, model, optional_params)
+
+        if generic_entry is not None:
+            return self._generic_completion(
+                site=site,
+                entry=generic_entry,
+                messages=messages,
+                model_response=model_response,
+                optional_params=optional_params,
+                litellm_params=litellm_params,
+                timeout=timeout,
                 model=model,
-                llm_provider=PROVIDER,
             )
 
         # Note: stream=True doesn't reach this method — litellm routes
@@ -271,7 +378,8 @@ class UCBrowserCustomLLM(CustomLLM):
             # entirely — the DOM path is already optimal there (~1.3s).
             # Reuse session_id as the page bucket so distinct sessions
             # get their own tabs.
-            result = _grok_send(
+            result = self._pin_to_browser_thread(
+                _grok_send,
                 prompt_text,
                 conversation_url=conversation_url,
                 timeout_s=timeout_s,
@@ -319,6 +427,51 @@ class UCBrowserCustomLLM(CustomLLM):
             content=result.get("response") or "",
             conversation_id=result.get("conversation_id"),
             conversation_url=result.get("url"),
+            prompt_text=prompt_text,
+        )
+
+    def _generic_completion(
+        self,
+        *,
+        site: str,
+        entry,
+        messages: list,
+        model_response: ModelResponse,
+        optional_params: dict,
+        litellm_params: dict | None,
+        timeout: Any,
+        model: str,
+    ) -> ModelResponse:
+        """Route a registry site through the generic engine (no adapter)."""
+        from uc_browser.sites.generic import GenericSiteError, get_generic_client
+
+        prompt_text = _last_user_message(messages)
+        if not prompt_text:
+            raise litellm.exceptions.BadRequestError(
+                message="UCBrowserCustomLLM: no user message found in messages.",
+                model=model,
+                llm_provider=PROVIDER,
+            )
+        timeout_s = int(timeout) if isinstance(timeout, (int, float)) and timeout else 60
+        session_key = _resolve_session_key(litellm_params, optional_params)
+        try:
+            result = self._pin_to_generic_thread(
+                get_generic_client().send,
+                site, entry.url, prompt_text,
+                session_key=session_key, timeout_s=timeout_s,
+            )
+        except GenericSiteError as exc:
+            raise litellm.exceptions.ServiceUnavailableError(
+                message=f"uc/{site} (generic engine): {exc}",
+                model=model,
+                llm_provider=PROVIDER,
+            ) from exc
+        return _populate_response(
+            model_response=model_response,
+            model_name=f"{PROVIDER}/{site}",
+            content=result["response"],
+            conversation_id=None,
+            conversation_url=result.get("page_url"),
             prompt_text=prompt_text,
         )
 

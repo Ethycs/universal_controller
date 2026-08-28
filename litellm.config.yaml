@@ -44,6 +44,23 @@ model_list:
       model: uc/grok
       timeout: 180
 
+  # Generic-engine sites (no hand-tuned adapter — routed through
+  # uc_browser.sites.generic via UCBrowser.chat()). Only sites that pass
+  # the bench's input pipeline are listed. Availability-gated: calls fail
+  # fast with ServiceUnavailable when the health monitor says down.
+  - model_name: uc-chatgpt
+    litellm_params: { model: uc/chatgpt, timeout: 180 }
+  - model_name: uc-perplexity
+    litellm_params: { model: uc/perplexity, timeout: 180 }
+  - model_name: uc-pi
+    litellm_params: { model: uc/pi, timeout: 180 }
+  - model_name: uc-lmarena
+    litellm_params: { model: uc/lmarena, timeout: 180 }
+  # grok.com via the generic engine (adapter bypassed) — generalization
+  # verification model; production grok traffic should use uc-grok.
+  - model_name: uc-grok-generic
+    litellm_params: { model: uc/grok-generic, timeout: 180 }
+
 litellm_settings:
   # Wire the persistent GrokClient-backed handler into the provider map
   # at proxy startup. The dotted path points at the module-level singleton
@@ -63,3 +80,16 @@ general_settings:
   # worker so we don't open competing browsers against the same profile.
   # (Pass `--num_workers 1` on the CLI as well — this is belt-and-braces.)
   worker_concurrency: 1
+
+  # Live availability menu. Forwards to the UC status server (run it
+  # alongside the proxy: `pixi run status-server`), so API clients can ask
+  # the same base URL which uc/* models are currently up:
+  #
+  #   GET http://localhost:4000/uc/availability
+  #
+  # Returns {sites: [...], models_available: ["uc/grok", ...]}; each site
+  # carries status/uptime/latency. The human uptime page is served by the
+  # status server directly at http://127.0.0.1:4010/.
+  pass_through_endpoints:
+    - path: "/uc/availability"
+      target: "http://127.0.0.1:4010/availability"

@@ -527,7 +527,9 @@ class GrokFastClient:
         with self._client._session(sk) as page:
             # Navigate to the target chat (or stay on home for new chat).
             self._client._navigate_in(page, url_target, wait_ms=0)
-            page.wait_for_selector("div.ProseMirror", timeout=15000)
+            # grok.com sits on a loading splash well past networkidle
+            # (bench measured 15-25s hydration) — 15s missed it.
+            page.wait_for_selector("div.ProseMirror", timeout=35000)
             self._ensure_installed(page, sk)
 
             # Snapshot assistant-block count so the DOM poll (below) can tell
