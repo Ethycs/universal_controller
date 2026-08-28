@@ -353,15 +353,30 @@ class HealthMonitor:
 
             top_score, where = self._detect_across_frames(page, bundle)
 
-            # No composer visible yet? Chat widgets hide theirs behind a
-            # launcher bubble — try opening it (structurally) and rescan.
+            # No composer visible yet? First try the vendor-signature
+            # fast path: identify the chat engine by its loader/globals
+            # and drive its KNOWN launcher (recipe covers every site on
+            # that engine). Fall back to the generic launcher heuristic.
             opened = None
+            vendor = None
             if top_score < 4:
-                for attempt in range(2):
+                try:
+                    from uc_browser import vendor_signatures as vs
+                    vendors = vs.identify(page)
+                    if vendors:
+                        vendor = vendors[0]
+                        if vs.open_widget(page, vendor):
+                            opened = f"vendor:{vendor}"
+                            page.wait_for_timeout(3000)
+                            top_score, where = self._detect_across_frames(page, bundle)
+                except Exception:
+                    pass
+            if top_score < 4:
+                for _attempt in range(2):
                     clicked = self._try_open_widget(page)
                     if not clicked:
                         break
-                    opened = clicked
+                    opened = opened or clicked
                     page.wait_for_timeout(2500)
                     top_score, where = self._detect_across_frames(page, bundle)
                     if top_score >= 4:
@@ -479,6 +494,8 @@ def availability_snapshot(registry, store: HealthStore) -> dict:
     than 2x its probe interval). Sites with a litellm_model additionally
     advertise the model name so API clients know what to request.
     """
+    from uc_browser.registry import advertised_model
+
     now = time.time()
     latest = store.latest()
     sites = []
@@ -487,14 +504,18 @@ def availability_snapshot(registry, store: HealthStore) -> dict:
         age = now - rec.get("at", 0) if rec else None
         fresh = age is not None and age < 2 * entry.probe_interval_s
         status = rec.get("status", STATUS_UNKNOWN) if fresh else STATUS_UNKNOWN
+        model, bootstrapped = advertised_model(entry)
         sites.append({
             "name": entry.name,
             "url": entry.url,
             "kind": entry.kind,
             "status": status,
             "available": status == STATUS_OK,
-            "litellm_model": entry.litellm_model,
-            "callable": bool(entry.litellm_model) and status == STATUS_OK,
+            "litellm_model": model,
+            "bootstrapped": bootstrapped,
+            "backup_model": entry.backup_model
+                            or os.environ.get("UC_BACKUP_MODEL") or None,
+            "callable": bool(model) and status == STATUS_OK,
             "level_reached": rec.get("level_reached") if fresh else None,
             "latency_ms": rec.get("latency_ms") if fresh else None,
             "last_checked": rec.get("at"),

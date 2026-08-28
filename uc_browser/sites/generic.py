@@ -74,6 +74,22 @@ class GenericClient:
 
     # ── sending ─────────────────────────────────────────────────────
 
+    @staticmethod
+    def _resolve_target(site: str, url: str) -> tuple[str, list[dict]]:
+        """Warm start from the Signature Lab feed: a fresh site profile
+        supplies the real chat page and its pre-steps. Cache, not
+        dependency — no profile (or an expired one) means the registered
+        URL and pure generic discovery."""
+        try:
+            from uc_browser.site_profiles import get_profile_store
+
+            profile = get_profile_store().fresh(site)
+            if profile:
+                return profile.chat_page_url, list(profile.pre_steps)
+        except Exception:
+            pass
+        return url, []
+
     def _page_for(self, site: str, url: str, session_key: Optional[str]):
         key = (site, session_key or "default")
         page = self._pages.get(key)
@@ -84,7 +100,20 @@ class GenericClient:
             except Exception:
                 pass
         uc = self._ensure_browser()
-        page = uc.open(url, wait_ms=4000)
+        target, pre_steps = self._resolve_target(site, url)
+        page = uc.open(target, wait_ms=4000)
+        if pre_steps:
+            from uc_browser.health import HealthMonitor
+
+            for step in pre_steps:
+                try:
+                    if step.get("type") == "launcher-auto":
+                        HealthMonitor._try_open_widget(page)
+                    elif step.get("type") == "click" and step.get("selector"):
+                        page.locator(step["selector"]).first.click(timeout=3000)
+                except Exception:
+                    continue
+            page.wait_for_timeout(2000)
         self._pages[key] = page
         return page, True
 

@@ -98,6 +98,60 @@ def test_signatures_endpoint(tmp_path, monkeypatch):
     assert feed["profiles"][0]["chat_page_url"] == "https://www.klm.com/help"
 
 
+# ── generic client consumes the feed (bootstrap warm start) ──────────
+
+
+def test_generic_client_warm_starts_from_profile(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    from uc_browser.sites.generic import GenericClient
+
+    monkeypatch.setenv("UC_PROFILES_FILE", str(tmp_path / "profiles.json"))
+    import uc_browser.site_profiles as sp
+    monkeypatch.setattr(sp, "_store", None)
+    sp.get_profile_store().upsert(_profile(
+        site="acme", url="https://support.acme.com/chat"))
+
+    client = GenericClient()
+    fake_uc = MagicMock()
+    fake_page = MagicMock()
+    fake_page.is_closed.return_value = False
+    fake_uc.open.return_value = fake_page
+    fake_uc.chat.return_value = "warm hello"
+    monkeypatch.setattr(client, "_ensure_browser", lambda: fake_uc)
+    # pre_steps in _profile() is launcher-auto — stub the widget opener.
+    from uc_browser.health import HealthMonitor
+    monkeypatch.setattr(HealthMonitor, "_try_open_widget",
+                        staticmethod(lambda page: "stub"))
+
+    out = client.send("acme", "https://acme.com", "msg")
+    # Opened the PROFILE's chat page, not the registered homepage.
+    fake_uc.open.assert_called_once_with("https://support.acme.com/chat",
+                                         wait_ms=4000)
+    assert out["response"] == "warm hello"
+
+
+def test_generic_client_falls_back_to_registered_url(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    from uc_browser.sites.generic import GenericClient
+
+    monkeypatch.setenv("UC_PROFILES_FILE", str(tmp_path / "empty.json"))
+    import uc_browser.site_profiles as sp
+    monkeypatch.setattr(sp, "_store", None)
+
+    client = GenericClient()
+    fake_uc = MagicMock()
+    fake_page = MagicMock()
+    fake_page.is_closed.return_value = False
+    fake_uc.open.return_value = fake_page
+    fake_uc.chat.return_value = "cold hello"
+    monkeypatch.setattr(client, "_ensure_browser", lambda: fake_uc)
+
+    client.send("acme", "https://acme.com", "msg")
+    fake_uc.open.assert_called_once_with("https://acme.com", wait_ms=4000)
+
+
 # ── candidate-page crawler ───────────────────────────────────────────
 
 

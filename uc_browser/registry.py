@@ -45,8 +45,16 @@ class SiteEntry:
     kind: str = "chat"                      # chat | widget
     notes: str = ""
     # litellm model that fronts this site, e.g. "uc/grok". None until a
-    # driver (site adapter or verified generic path) exists.
+    # driver (site adapter or verified generic path) exists — but see
+    # auto-bootstrap: chat-kind sites are generically drivable as
+    # uc/<name> even with this unset. Widget-kind sites are NEVER
+    # auto-bootstrapped (their chats reach human support staff); they
+    # require an explicit litellm_model to become callable.
     litellm_model: Optional[str] = None
+    # Conventional-API fallback when this site is down/blocked: any model
+    # litellm can route natively (e.g. "gpt-4o-mini", "xai/grok-3").
+    # None → fall back to the UC_BACKUP_MODEL env default, if set.
+    backup_model: Optional[str] = None
     login_required: bool = False
     probe_interval_s: int = DEFAULT_PROBE_INTERVAL_S
     # Deepest probe level to run: "reach" | "detect" | "send".
@@ -187,6 +195,28 @@ class SiteRegistry:
                 self._save()
                 return True
         return False
+
+
+def bootstrap_enabled() -> bool:
+    """Auto-bootstrap: verified chat-kind sites become callable uc/<name>
+    models without explicit wiring. On by default; UC_AUTO_BOOTSTRAP=0
+    turns it off."""
+    return os.environ.get("UC_AUTO_BOOTSTRAP", "1") != "0"
+
+
+def advertised_model(entry: SiteEntry) -> tuple[Optional[str], bool]:
+    """(model_name, bootstrapped) this entry presents to API clients.
+
+    Explicit litellm_model wins. Otherwise chat-kind sites bootstrap to
+    uc/<name> when enabled. Widget-kind sites never bootstrap — their
+    chats reach human support staff, so callability is an explicit
+    decision, not an inference.
+    """
+    if entry.litellm_model:
+        return entry.litellm_model, False
+    if bootstrap_enabled() and entry.kind == "chat":
+        return f"uc/{entry.name}", True
+    return None, False
 
 
 _registry: Optional[SiteRegistry] = None

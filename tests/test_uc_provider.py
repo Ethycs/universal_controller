@@ -400,6 +400,105 @@ def test_flattened_extras_from_proxy_are_honored(handler, fake_grok):
     assert fake_grok.send.call_args.kwargs["wait_for_response"] is False
 
 
+# ── Auto-bootstrap + conventional-API backup ─────────────────────────
+
+
+def test_bootstrap_routes_unwired_chat_site_generically(handler, monkeypatch):
+    """A chat-kind registry site with NO litellm_model (e.g. deepseek)
+    is callable as uc/<name> via the generic engine when auto-bootstrap
+    is on (the default)."""
+    from uc_browser.sites import generic as generic_mod
+
+    monkeypatch.setenv("UC_AVAILABILITY_GATE", "0")
+    monkeypatch.delenv("UC_AUTO_BOOTSTRAP", raising=False)
+    fake = MagicMock()
+    fake.send.return_value = {"response": "boot hello", "site": "deepseek",
+                              "page_url": "https://chat.deepseek.com/"}
+    with patch.object(generic_mod, "get_generic_client", return_value=fake):
+        out = handler.completion(
+            model="deepseek",
+            messages=[{"role": "user", "content": "hi"}],
+            model_response=_fresh_model_response(),
+            optional_params={},
+        )
+    assert out.choices[0].message.content == "boot hello"
+    assert out.model == "uc/deepseek"
+
+
+def test_bootstrap_off_rejects_unwired_site(handler, monkeypatch):
+    monkeypatch.setenv("UC_AUTO_BOOTSTRAP", "0")
+    with pytest.raises(litellm.exceptions.BadRequestError):
+        handler.completion(
+            model="deepseek",
+            messages=[{"role": "user", "content": "hi"}],
+            model_response=_fresh_model_response(),
+            optional_params={},
+        )
+
+
+def test_widget_sites_never_bootstrap(handler, monkeypatch):
+    """Widget-kind sites reach human support staff — callability must be
+    an explicit decision, so bootstrap skips them even when enabled."""
+    import uc_browser.registry as reg_mod
+
+    monkeypatch.delenv("UC_AUTO_BOOTSTRAP", raising=False)
+    entry = reg_mod.SiteEntry(name="acme-widget", url="https://acme.example",
+                              kind="widget")
+    model, bootstrapped = reg_mod.advertised_model(entry)
+    assert model is None and bootstrapped is False
+
+
+def test_backup_model_used_when_site_down(handler, monkeypatch, tmp_path):
+    """Availability gate blocks + backup configured → the request routes
+    to the conventional-API model, labeled in hidden params."""
+    import time as _time
+
+    from uc_browser.health import STATUS_DOWN, HealthStore, ProbeResult
+
+    monkeypatch.setenv("UC_HEALTH_DIR", str(tmp_path / "health"))
+    monkeypatch.delenv("UC_AVAILABILITY_GATE", raising=False)
+    monkeypatch.setenv("UC_BACKUP_MODEL", "gpt-4o-mini")
+    HealthStore().record(ProbeResult(
+        site="grok", status=STATUS_DOWN, level_reached="none",
+        latency_ms=1, at=_time.time()))
+
+    backup_resp = _fresh_model_response()
+    backup_resp.choices[0].message.content = "backup answer"
+    with patch.object(litellm, "completion", return_value=backup_resp) as bc:
+        out = handler.completion(
+            model="grok",
+            messages=[{"role": "user", "content": "hi"}],
+            model_response=_fresh_model_response(),
+            optional_params={},
+        )
+    bc.assert_called_once()
+    assert bc.call_args.kwargs["model"] == "gpt-4o-mini"
+    assert out.choices[0].message.content == "backup answer"
+    assert out._hidden_params["uc_backup_used"] == "gpt-4o-mini"
+    assert "down" in out._hidden_params["uc_backup_reason"]
+
+
+def test_no_backup_flag_disables_fallback(handler, monkeypatch, tmp_path):
+    import time as _time
+
+    from uc_browser.health import STATUS_DOWN, HealthStore, ProbeResult
+
+    monkeypatch.setenv("UC_HEALTH_DIR", str(tmp_path / "health"))
+    monkeypatch.delenv("UC_AVAILABILITY_GATE", raising=False)
+    monkeypatch.setenv("UC_BACKUP_MODEL", "gpt-4o-mini")
+    HealthStore().record(ProbeResult(
+        site="grok", status=STATUS_DOWN, level_reached="none",
+        latency_ms=1, at=_time.time()))
+
+    with pytest.raises(litellm.exceptions.ServiceUnavailableError):
+        handler.completion(
+            model="grok",
+            messages=[{"role": "user", "content": "hi"}],
+            model_response=_fresh_model_response(),
+            optional_params={"extra_body": {"no_backup": True}},
+        )
+
+
 # ── Async path ───────────────────────────────────────────────────────
 
 

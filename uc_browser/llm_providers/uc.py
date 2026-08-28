@@ -58,17 +58,38 @@ SUPPORTED_MODELS: set[str] = {"grok"}
 
 
 def _generic_site_entry(site: str):
-    """Registry entry for ``site`` when it's advertised as a generic
-    litellm model (litellm_model == 'uc/<site>' without an adapter)."""
+    """Registry entry for ``site`` when it routes through the generic
+    engine: explicitly advertised as uc/<site>, or auto-bootstrapped
+    (chat-kind sites are generically drivable by default; widget-kind
+    never bootstraps — see registry.advertised_model)."""
+    try:
+        from uc_browser.registry import advertised_model, get_registry
+
+        entry = get_registry().get(site)
+        if entry is not None:
+            model, _bootstrapped = advertised_model(entry)
+            if model == f"{PROVIDER}/{site}":
+                return entry
+    except Exception:  # pragma: no cover — registry must never break routing
+        logger.debug("generic-site lookup failed for %r", site, exc_info=True)
+    return None
+
+
+def _backup_model_for(site: str, optional_params: dict) -> Optional[str]:
+    """Conventional-API fallback for a down/blocked site: the registry
+    entry's backup_model, else the UC_BACKUP_MODEL env default. Disabled
+    per-request with extra_body={'no_backup': true}."""
+    if _from_extras(optional_params, "no_backup"):
+        return None
     try:
         from uc_browser.registry import get_registry
 
         entry = get_registry().get(site)
-        if entry is not None and entry.litellm_model == f"{PROVIDER}/{site}":
-            return entry
-    except Exception:  # pragma: no cover — registry must never break routing
-        logger.debug("generic-site lookup failed for %r", site, exc_info=True)
-    return None
+        if entry and entry.backup_model:
+            return entry.backup_model
+    except Exception:
+        pass
+    return os.environ.get("UC_BACKUP_MODEL") or None
 
 
 def _check_availability(site: str, model: str, optional_params: dict) -> None:
@@ -304,19 +325,32 @@ class UCBrowserCustomLLM(CustomLLM):
                     llm_provider=PROVIDER,
                 )
 
-        _check_availability(site, model, optional_params)
+        backup = _backup_model_for(site, optional_params)
+        try:
+            _check_availability(site, model, optional_params)
+        except litellm.exceptions.ServiceUnavailableError as exc:
+            if backup:
+                return self._backup_completion(
+                    backup, site, messages, model_response, cause=str(exc))
+            raise
 
         if generic_entry is not None:
-            return self._generic_completion(
-                site=site,
-                entry=generic_entry,
-                messages=messages,
-                model_response=model_response,
-                optional_params=optional_params,
-                litellm_params=litellm_params,
-                timeout=timeout,
-                model=model,
-            )
+            try:
+                return self._generic_completion(
+                    site=site,
+                    entry=generic_entry,
+                    messages=messages,
+                    model_response=model_response,
+                    optional_params=optional_params,
+                    litellm_params=litellm_params,
+                    timeout=timeout,
+                    model=model,
+                )
+            except litellm.exceptions.ServiceUnavailableError as exc:
+                if backup:
+                    return self._backup_completion(
+                        backup, site, messages, model_response, cause=str(exc))
+                raise
 
         # Note: stream=True doesn't reach this method — litellm routes
         # streaming requests to ``streaming``/``astreaming`` below.
@@ -388,6 +422,10 @@ class UCBrowserCustomLLM(CustomLLM):
                 on_delta=on_delta,
             )
         except GrokAuthRequired as exc:
+            if backup:
+                return self._backup_completion(
+                    backup, site, messages, model_response,
+                    cause=f"auth required: {exc}")
             raise litellm.exceptions.AuthenticationError(
                 message=f"Grok auth required: {exc}",
                 model=model,
@@ -474,6 +512,37 @@ class UCBrowserCustomLLM(CustomLLM):
             conversation_url=result.get("page_url"),
             prompt_text=prompt_text,
         )
+
+    def _backup_completion(
+        self,
+        backup_model: str,
+        site: str,
+        messages: list,
+        model_response: ModelResponse,
+        *,
+        cause: str,
+    ) -> ModelResponse:
+        """Route the request to a conventional-API litellm model because
+        the browser-driven site is down/blocked. The response is labeled
+        via hidden params so callers can tell a backup answer from a
+        site-rendered one."""
+        logger.warning("uc/%s unavailable (%s) — falling back to %s",
+                       site, cause[:120], backup_model)
+        resp = litellm.completion(model=backup_model, messages=messages)
+        content = resp.choices[0].message.content or ""
+        out = _populate_response(
+            model_response=model_response,
+            model_name=f"{PROVIDER}/{site}",
+            content=content,
+            conversation_id=None,
+            conversation_url=None,
+            prompt_text=_last_user_message(messages),
+        )
+        hp = getattr(out, "_hidden_params", None) or {}
+        hp["uc_backup_used"] = backup_model
+        hp["uc_backup_reason"] = cause[:200]
+        out._hidden_params = hp
+        return out
 
     def _cleanup_threads(self, keep_recent: int) -> str:
         """Delete all but the ``keep_recent`` most-recent Grok conversations.
