@@ -99,5 +99,11 @@ ruff = ">=0.4"
 
 [tool.pixi.feature.dev.tasks]
 test = "pytest -v tests/"
+bench = "python bench/run_bench.py"
+bench-check = "python bench/run_bench.py --check"
+bench-baseline = "python bench/run_bench.py --update-baseline"
+bench-capture = "python bench/capture.py"
+status-server = "python -m uc_browser.status_server"
+lab = "python -m uc_browser.lab"
 lint = "ruff check uc_browser/ tests/"
 format = "ruff format uc_browser/ tests/"

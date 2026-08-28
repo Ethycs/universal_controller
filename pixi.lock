@@ -2016,7 +2016,7 @@ packages:
 - pypi: ./
   name: universal-controller
   version: 1.0.0
-  sha256: 86fc01e182a1f3bc87ac67a9a211fd2dab5f3c13670eccb4877c90f44d96968e
+  sha256: 2ed0d91d8a4f7171fb8249d8285f89d61d82cebceaa9abecee642c512aefcbcf
   requires_dist:
   - playwright>=1.40
   - numpy>=1.24

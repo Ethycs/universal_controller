@@ -6,3 +6,5 @@ __pycache__/
 .pixi/
 data/training/
 data/*
+bench/.capture_profile/
+bench/results/latest.json

@@ -104,6 +104,24 @@ Every module is in service of the chat-to-API mission:
 | `src/llm/context-extractor.js` | Structured conversation snapshot for downstream LLMs |
 | `extension/` | MV3 packaging so the above runs in real Chromium with `window.__UC_*` callable from Playwright |
 | `scripts/` | Train the DOM classifier so `chat_input` labels stay accurate across new UI frameworks |
+| `bench/` | Generalization benchmark: offline MHTML fixtures of real chat sites, honest top-1 scoring, regression gate ([bench/README.md](bench/README.md)) |
+
+---
+
+## Measuring generalization
+
+The "any chat UI" claim is tested, not assumed. `bench/` captures real
+sites as MHTML snapshots (full CSS/ARIA fidelity, iframes included),
+injects the built engine offline via CDP, and scores whether UC's **#1**
+answer for the input, send button, and message stream matches
+per-site ground-truth oracles — plus false-positive checks on search and
+form pages where there is no chat. Deterministic, login-free, CI-able.
+
+```bash
+pixi run bench            # score all fixtures
+pixi run bench-check      # fail on regression vs the checked-in baseline
+pixi run bench-capture    # refresh fixtures from the live sites
+```
 
 ---
 
