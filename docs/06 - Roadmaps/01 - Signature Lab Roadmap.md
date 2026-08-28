@@ -10,7 +10,9 @@
 - ✅ Signature store + `autoBind` runtime — exists in `src/core/signature-store.js` (**unused muscle**, fingerprint-only schema)
 - ✅ Site-profile schema (tier 3) — `uc_browser/site_profiles.py`, `data/site_profiles.json` (UNCOMMITTED)
 - ✅ Subpage-crawling lab pass — `uc_browser/lab.py` (`pixi run lab`); first live pass landed 2026-08-27: 7/11 degraded sites gained profiles
-- ✅ ~50% Distribution feed — `GET /signatures` served by status server; client consumption still 🔲
+- ✅ Distribution feed + client consumption — `GET /signatures`; GenericClient warm-starts from fresh profiles (chat_page_url + pre_steps), 2026-08-28
+- ✅ Auto-bootstrap — verified chat-kind sites callable as `uc/<name>` without wiring (`UC_AUTO_BOOTSTRAP`, widgets excluded by policy); conventional-API backup via `UC_BACKUP_MODEL` / per-site `backup_model` with `uc_backup_used` labeling, 2026-08-28
+- ✅ Analyst agent v1 — `uc_browser/analyst.py`: LLM-guided engineering of lab holdouts, powered by the callable `uc/*` menu itself (self-hosting), detect-only, same-site, emits `provenance: analyst-agent` profiles; first field run 🟡 IN FLIGHT 2026-08-28
 - 🔲 Telemetry return loop
 - ✅ ~50% Cold/warm bench split — bench output now explicitly labeled `mode: cold-generic`; warm mode itself 🔲
 - 🔲 Analyst agent tier

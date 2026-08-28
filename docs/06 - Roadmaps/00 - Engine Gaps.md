@@ -19,6 +19,49 @@
 | Chat-container detector ranks junk: `html>head` and zero-size `aria-live` announcer nodes can win `detectAll('STRUCTURAL').chat` — needs a visibility/size floor before scoring | — | Meaningful `container_top1` beyond the synthetic fixture | 🔲 Open |
 | Login-wall heuristic misfires on marketing pages: lego / lg / sephora classified `login` because "sign in / sign up" text hits, though no wall blocks a chat | — | Honest sweep statuses; availability gate wrongly refusing those sites | 🔲 Open |
 
+## Degraded brand-site triage (2026-08-28, validated)
+
+Diagnosed the 5 `degraded` brand domains directly. Finding: **4 of 5 have
+no reachable on-site chat composer** — the degraded verdict is *correct*,
+not a detection bug:
+
+| Site | Reality | Verdict |
+|---|---|---|
+| duolingo | reCAPTCHA wall; support bot is in-app | correct degraded |
+| klm | reCAPTCHA; BlueBot lives in Messenger/WhatsApp, site routes to contact forms | correct degraded |
+| lemonade | Maya lives in the app quote flow; site has only a `mailto:` | correct degraded |
+| target | help pages top out at `#email-address` (an email field) score 3.94 — **gate correctly rejects a non-chat input** | correct degraded |
+| klarna | real chat widget on homepage but **flaky** (scored 4.2 one load, 0.0 another — hydration race) | genuine target |
+
+Takeaways: (1) the 3.94 near-miss is NOT gate-tuning bait — lowering the
+gate would admit an email field; the gate is right. (2) Coverage ceiling
+on this list is bounded by brands putting bots in-app / behind external
+messaging, not by UC's engine. (3) Only klarna is a genuine
+engine/timing target: needs a longer hydration settle before the detect
+scan. Tracked as the flaky-hydration item below.
+
+## Vendor-zoo finding (2026-08-28, validated)
+
+Probed 20 chat-widget vendors (each dogfoods its own engine). **7/20
+detected + captured as fixtures** (`bench/fixtures/vendor-*`): tawk 7.8,
+chatling 7.2, drift 6.8, intercom-fin 6.0, livechat 5.2, zoho-salesiq
+4.5, tidio-demo 4.2 — **all iframe-based, composer present or launcher
+worked.**
+
+The other 13 scored ~0.0. Hypothesized shadow-DOM piercing gap;
+**verified false** — crisp/intercom/zendesk have no composer in the DOM
+at probe time at all (crisp 0 inputs anywhere, intercom 1 shadow host but
+0 inputs in it, zendesk only light-DOM search boxes). Actual gap: **the
+generic launcher-open heuristic has low recall on modern widgets** — it
+doesn't click their launcher, so the composer iframe never injects. This
+is an interaction/timing gap, not a detection gap.
+
+| Fix | Depends on | Blocks | Status |
+|---|---|---|---|
+| Launcher-open recall: widget launchers are often a fixed bottom-right button/iframe with vendor-classed wrappers or an SVG-only label — broaden `_try_open_widget` candidate scoring + click both the element and its center-point | nothing | 13/20 vendors, most brand widgets | 🔲 |
+| Re-detect after async widget load: poll for the composer for ~5s post-click (iframe injects late) instead of a single 2.5s wait | nothing | post-click detection | 🔲 |
+| The 7 vendor fixtures need oracle annotation to become *scored* (currently skipped/unannotated) | oracle pass | regression scoring of widget engines | 🔲 |
+
 ## Tier 1 — Real work
 
 | Gap | Depends on | Blocks | Status |
