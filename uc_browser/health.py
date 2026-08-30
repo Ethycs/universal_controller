@@ -219,10 +219,24 @@ class HealthMonitor:
 
     def __init__(self, store: Optional[HealthStore] = None,
                  profile_dir: Optional[Path] = None,
-                 offscreen: bool = True):
+                 offscreen: bool = True,
+                 engine: str = "chrome"):
+        # Default engine is the INSTALLED Google Chrome (channel), not
+        # bundled Chromium: it presents a real consumer-Chrome fingerprint
+        # and clears bot challenges that reduce bundled Chromium to a
+        # near-empty DOM (validated: aeromexico/marriott/h-m all rendered
+        # under chrome where bundled Chromium was challenged). Falls back
+        # to bundled Chromium automatically if Chrome isn't installed
+        # (see _launch_context). Override with UC_HEALTH_ENGINE.
+        engine = os.environ.get("UC_HEALTH_ENGINE", engine)
         self.store = store or HealthStore()
-        self._profile_dir = profile_dir or (_SUBMODULE_ROOT / "data" / ".health_profile")
+        # Per-engine profile dir so parallel-engine matrix runs don't share
+        # a single-instance profile lock.
+        base = profile_dir or (_SUBMODULE_ROOT / "data" / ".health_profile")
+        self._profile_dir = base if engine == "chromium" else Path(
+            str(base) + f"_{engine}")
         self._offscreen = offscreen
+        self.engine = engine
         self._probe_lock = threading.Lock()
         self._bundle: Optional[str] = None
 
@@ -247,21 +261,50 @@ class HealthMonitor:
     def probe_site(self, site: SiteEntry) -> ProbeResult:
         return self.probe_sites([site])[0]
 
+    def _launch_context(self, p):
+        """Launch a browsing context for self.engine. Chromium keeps its
+        persistent profile + anti-automation args; Firefox/WebLit don't
+        take Chromium flags and have no extension, so they use a plain
+        launch + context (detection injects the bundle via evaluate, which
+        is engine-agnostic)."""
+        viewport = {"width": 1440, "height": 900}
+        if self.engine in ("chromium", "chrome"):
+            args = ["--disable-blink-features=AutomationControlled"]
+            if self._offscreen:
+                args.append("--window-position=-32000,-32000")
+            self._profile_dir.mkdir(parents=True, exist_ok=True)
+            # engine "chrome" uses the INSTALLED Google Chrome binary
+            # (channel), which presents a real-Chrome fingerprint/UA — far
+            # likelier to pass bot challenges than bundled Chromium. Falls
+            # back to bundled Chromium if Chrome isn't installed.
+            channel = "chrome" if self.engine == "chrome" else None
+            try:
+                return p.chromium.launch_persistent_context(
+                    str(self._profile_dir), headless=False, args=args,
+                    channel=channel, viewport=viewport)
+            except Exception:
+                if channel:
+                    return p.chromium.launch_persistent_context(
+                        str(self._profile_dir), headless=False, args=args,
+                        viewport=viewport)
+                raise
+        bt = {"firefox": p.firefox, "webkit": p.webkit}.get(self.engine)
+        if bt is None:
+            raise ValueError(f"unknown engine: {self.engine}")
+        # Firefox/WebKit: headless is fine (no extension to require a head).
+        browser = bt.launch(headless=True)
+        ctx = browser.new_context(viewport=viewport)
+        ctx._uc_owner_browser = browser  # keep a handle so close() works
+        return ctx
+
     def _probe_batch(self, sites: list[SiteEntry]) -> list[ProbeResult]:
         from playwright.sync_api import sync_playwright
 
         results: list[ProbeResult] = []
-        args = ["--disable-blink-features=AutomationControlled"]
-        if self._offscreen:
-            args.append("--window-position=-32000,-32000")
-        self._profile_dir.mkdir(parents=True, exist_ok=True)
 
         with sync_playwright() as p:
             try:
-                ctx = p.chromium.launch_persistent_context(
-                    str(self._profile_dir), headless=False, args=args,
-                    viewport={"width": 1440, "height": 900},
-                )
+                ctx = self._launch_context(p)
             except Exception as e:
                 now = time.time()
                 for site in sites:
@@ -272,17 +315,24 @@ class HealthMonitor:
                     self.store.record(results[-1])
                 return results
 
-            try:
-                from playwright_stealth import Stealth
-                Stealth().apply_stealth_sync(ctx)
-            except Exception:
-                pass
+            if self.engine == "chromium":
+                try:
+                    from playwright_stealth import Stealth
+                    Stealth().apply_stealth_sync(ctx)
+                except Exception:
+                    pass
 
             for site in sites:
                 result = self._probe_one(ctx, site)
                 self.store.record(result)
                 results.append(result)
             ctx.close()
+            owner = getattr(ctx, "_uc_owner_browser", None)
+            if owner is not None:
+                try:
+                    owner.close()
+                except Exception:
+                    pass
         return results
 
     def _probe_one(self, ctx, site: SiteEntry) -> ProbeResult:
