@@ -56,6 +56,13 @@ class SiteProfile:
     ttl_s: int = DEFAULT_TTL_S
     provenance: str = "lab-auto"    # lab-auto | analyst-agent | user
     notes: str = ""
+    # Learned detection timing (uc_browser.timing): how long to wait for
+    # the composer to appear, its stability, and the raw profile. None
+    # until a calibration pass runs.
+    detect_wait_ms: Optional[int] = None
+    detect_reliability: Optional[float] = None
+    detect_score_variance: Optional[float] = None
+    timing: Optional[dict] = None
 
     def is_fresh(self, now: Optional[float] = None) -> bool:
         return ((now or time.time()) - self.verified_at) < self.ttl_s

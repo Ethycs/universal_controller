@@ -319,15 +319,22 @@ class HealthMonitor:
             except Exception:
                 pass
 
-            # Let slow hydrators settle: poll for any visible input.
-            deadline = time.time() + 15
-            while time.time() < deadline:
-                try:
-                    if page.evaluate(_READY_INPUT_JS):
-                        break
-                except Exception:
-                    pass
-                page.wait_for_timeout(1000)
+            # Let slow hydrators settle. If a timing profile learned this
+            # site's composer-arrival distribution, wait the recommended
+            # time (upper-CI + margin) instead of the fixed poll; else
+            # poll up to 15s for any visible input.
+            learned_wait = profile.detect_wait_ms if profile else None
+            if learned_wait:
+                page.wait_for_timeout(min(learned_wait, 30000))
+            else:
+                deadline = time.time() + 15
+                while time.time() < deadline:
+                    try:
+                        if page.evaluate(_READY_INPUT_JS):
+                            break
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(1000)
 
             try:
                 shape = page.evaluate(_LOGIN_WALL_JS)
