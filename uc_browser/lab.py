@@ -166,6 +166,20 @@ class Lab:
             rec["ok"] = score >= DETECT_GATE
             if rec["ok"]:
                 self._save_fixture(ctx, page, url)
+                # Reverse the win into training data + a signature so the
+                # find strengthens the scanner (closed loop).
+                try:
+                    from uc_browser.reverser import emit, reverse
+                    for frame in page.frames:
+                        try:
+                            frame.evaluate(bundle)
+                        except Exception:
+                            pass
+                    rc = reverse(page, source_url=url)
+                    if rc is not None:
+                        rec["reversed_rows"] = emit(rc)
+                except Exception as e:
+                    logger.debug("reverse failed for %s: %s", url, e)
             return rec
         finally:
             page.close()
