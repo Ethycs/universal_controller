@@ -17,6 +17,7 @@ from uc_browser.sites import grok as grok_mod
 from uc_browser.sites.grok import (
     GrokAuthRequired,
     GrokClient,
+    _clean_dom_reply,
     _conv_id_from_url,
     _normalize_url,
     _strip_thought_prefix,
@@ -71,6 +72,22 @@ def test_conv_id_from_url(url, expected):
 )
 def test_strip_thought_prefix(raw, expected):
     assert _strip_thought_prefix(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        # Assistant block innerText opens with the speaker label.
+        ("Grok\n\nPONG", "PONG"),
+        ("Grok\n\nThought for 3s\n\nbody", "body"),
+        # A reply that merely starts with the word keeps it.
+        ("Grok is a model by xAI.", "Grok is a model by xAI."),
+        ("PONG", "PONG"),
+        ("", ""),
+    ],
+)
+def test_clean_dom_reply(raw, expected):
+    assert _clean_dom_reply(raw) == expected
 
 
 def test_normalize_url_full_url_passthrough():
