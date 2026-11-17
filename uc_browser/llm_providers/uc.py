@@ -405,9 +405,9 @@ class UCBrowserCustomLLM(CustomLLM):
             conversation_url = self.get_session_url(session_key)
 
         try:
-            # Tries the React-onSubmit + expect_response fast path first
-            # (~1.8s warm continue, ~6.3s cold) and falls back to the
-            # DOM-driven GrokClient.send on any RuntimeError. Blind-mode
+            # Tries the fast path first (Grok's own submit, reply read back
+            # over its REST API) and falls back to the DOM-driven
+            # GrokClient.send only if nothing was sent. Blind-mode
             # callers (wait_for_response=False) skip the fast path
             # entirely — the DOM path is already optimal there (~1.3s).
             # Reuse session_id as the page bucket so distinct sessions

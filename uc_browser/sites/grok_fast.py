@@ -1,38 +1,35 @@
-"""Grok fast path: trigger submit in-page + capture reply at the network layer.
+"""Grok fast path: trigger submit in-page, read the reply back over REST.
 
 Two halves:
 
 1. **Trigger submit in-page.** ``__UC_grokTriggerSubmit`` walks a chain —
-   click Grok's div-shaped send control → invoke React's form
-   ``onSubmit`` from the fiber tree → dispatch a keyboard Enter — and
-   returns on the first method that empties the composer. Going through
-   Grok's own click/submit path keeps the ``x-statsig-id`` anti-bot
-   signing intact: the headers are composed inside the apiClient wrapper
-   on the way out, so we have to ride that wrapper.
+   click Grok's send control → invoke React's form ``onSubmit`` from the
+   fiber tree → dispatch a keyboard Enter — and returns on the first
+   method that empties the composer. Going through Grok's own submit path
+   keeps its anti-bot request signing intact; we never post a chat
+   ourselves.
 
-2. **Capture the reply via** :meth:`page.expect_response`. The matcher
-   fires on either ``/conversations/new`` (fresh chat) or
-   ``/conversations/<uuid>/responses`` (continue) and we read the body
-   directly. Network-level capture sees the call whether Grok used
-   ``fetch`` or ``XMLHttpRequest`` and survives Sentry's ``window.fetch``
-   wrap, unlike an in-page hook.
+2. **Read the reply via Grok's REST API.** Grok streams the chat over a
+   WebSocket (``wss://grok.com/ws/mgw/``, seen 2026-11-17), so there is no
+   HTTP chat response to capture. Once the submit is confirmed we poll the
+   read endpoints the page itself uses — ``GET .../response-node`` for the
+   conversation's response ids, ``POST .../load-responses`` for the newest
+   assistant response — until Grok marks it complete (``partial`` false).
+   That returns the reply as Grok stored it (Markdown intact), not the
+   rendered page text.
 
-If ``expect_response`` misses *after* the submit is confirmed (large
-contexts can outlast the listener window), :meth:`_poll_dom_response`
-reads the assistant block from the DOM rather than letting the caller
-retype the message. Genuine pre-submit failures (no editor, setText
-broke, trigger chain exhausted) still raise ``RuntimeError`` so
-``send_with_fallback`` can drop to ``GrokClient.send``.
-
-Expected warm overhead per send: < 0.5s + Grok's actual generation
-time, vs ~2.4s overhead on the DOM-only path.
+If the REST read fails *after* the submit is confirmed,
+:meth:`_poll_dom_response` reads the assistant block from the DOM rather
+than letting the caller retype the message. Genuine pre-submit failures
+(no editor, setText broke, trigger chain exhausted) still raise
+``RuntimeError`` so ``send_with_fallback`` can drop to ``GrokClient.send``.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import re
 import threading
 import time
 from typing import Optional
@@ -40,23 +37,27 @@ from typing import Optional
 from uc_browser.sites.grok import (
     GrokClient,
     _SELECTORS,
+    _clean_dom_reply,
     _conv_id_from_url,
     _strip_thought_prefix,
-)
-# The JSON-lines parsers live with the (currently-not-wired) shim-path
-# module so we don't duplicate them.
-from uc_browser.sites.grok_api import (
-    _extract_assistant_text,
-    _extract_conversation_id,
 )
 
 logger = logging.getLogger("uc_browser.sites.grok_fast")
 
-# Match both ``/conversations/new`` (new chats) and
-# ``/conversations/<uuid>/responses`` (continuing existing chats).
-_CHAT_URL_RE = re.compile(
-    r"/rest/app-chat/conversations(/new|/[0-9a-fA-F-]+/responses)\b"
-)
+_API = "https://grok.com/rest/app-chat/conversations"
+_POLL_MS = 500
+# Consecutive REST failures before giving up on the API read for this send.
+_MAX_API_FAILURES = 5
+
+# In-page fetch: rides the page's cookies, so the session is the user's.
+_FETCH_JS = """async ([url, body]) => {
+  const r = await fetch(url, {
+    method: body ? 'POST' : 'GET', credentials: 'include',
+    headers: body ? {'content-type': 'application/json'} : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return {status: r.status, body: await r.text()};
+}"""
 
 
 def _is_reasoning_banner(text: str) -> bool:
@@ -89,7 +90,7 @@ def _stream_delta(cur: str, emitted: str) -> tuple[str, str]:
     emits forward (append-only) growth. Returns ``(delta_to_emit, new_emitted)``;
     ``delta_to_emit`` may be empty.
     """
-    visible = _strip_thought_prefix(cur)
+    visible = _clean_dom_reply(cur)
     # Hold back the forming reasoning banner until real answer text appears
     # (it gets replaced by the answer, at which point `visible` is no longer a
     # banner and the normal forward-diff below emits the reply).
@@ -109,19 +110,6 @@ _INSTALL_JS = r"""
 (() => {
   if (window.__UC_GROK_FAST_INSTALLED) return;
   window.__UC_GROK_FAST_INSTALLED = true;
-
-  // ── Response storage (polled by wait_for_function, NOT expose_function) ──
-  // Sync Playwright can't deliver expose_function callbacks while Python
-  // is blocked on the same thread, so we write to a window slot and let
-  // Python poll via wait_for_function (which yields the greenlet).
-  window.__GROK_LAST_RESPONSE = null;
-  window.__GROK_RESPONSE_VERSION = 0;
-  window.__UC_grokDeliver = function(payload) {
-    try {
-      window.__GROK_LAST_RESPONSE = payload;
-      window.__GROK_RESPONSE_VERSION++;
-    } catch (e) {}
-  };
 
   // ── React onSubmit invoker ────────────────────────────────
   // Walks up from div.ProseMirror to the closest fiber, then up through
@@ -457,44 +445,89 @@ _INSTALL_JS = r"""
 
 
 class GrokFastClient:
-    """Fast-path Grok client. Reuses GrokClient as the auth oracle.
-
-    The response-delivery mechanism is *polled*, not bridged: the install
-    script's interceptor writes the response onto
-    ``window.__GROK_LAST_RESPONSE`` and bumps
-    ``window.__GROK_RESPONSE_VERSION``. The Python ``send()`` uses
-    :func:`page.wait_for_function` to wait for the version counter to
-    advance — that yields Playwright's greenlet between checks (unlike a
-    Python-side ``queue.get`` which would block the whole thread and
-    starve the bridge).
-    """
+    """Fast-path Grok client. Reuses GrokClient as the auth oracle."""
 
     def __init__(self, grok_client: Optional[GrokClient] = None) -> None:
         from uc_browser.sites.grok import get_grok_client
         self._client = grok_client or get_grok_client()
-        # session_key -> True once the install script + interceptor
-        # registration is in place for that session's page.
+        # session_key -> True once the install script is in place for that
+        # session's page.
         self._installed: dict[str, bool] = {}
         self._lock = threading.Lock()
 
     # ── Internal: install per session page ──────────────────
 
     def _ensure_installed(self, page, session_key: str) -> None:
-        """Install the React onSubmit invoker on the page.
+        """Install the submit-trigger helpers on the page.
 
         Always run the JS — page.goto for a new URL resets window globals
         so a previously-installed walker disappears. The install script
         guards itself with ``__UC_GROK_FAST_INSTALLED``, so re-running on
         the same warm page is a cheap no-op.
-
-        Response capture is done at the Playwright network layer via
-        ``page.expect_response`` — that sees the call regardless of
-        whether Grok used ``fetch`` or ``XMLHttpRequest``, and Sentry's
-        ``window.fetch`` wrap can't bypass it.
         """
         page.evaluate(_INSTALL_JS)
         with self._lock:
             self._installed[session_key] = True
+
+    # ── Internal: Grok's REST read endpoints ────────────────
+
+    @staticmethod
+    def _api(page, url: str, body: Optional[dict] = None) -> dict:
+        r = page.evaluate(_FETCH_JS, [url, body]) or {}
+        if r.get("status") != 200:
+            raise RuntimeError(f"HTTP {r.get('status')} from {url.split('?')[0]}")
+        return json.loads(r.get("body") or "{}")
+
+    def _response_nodes(self, page, conv_id: str) -> list[dict]:
+        return self._api(
+            page, f"{_API}/{conv_id}/response-node?includeThreads=true"
+        ).get("responseNodes") or []
+
+    def _await_api_reply(
+        self, page, known_ids: set[str], deadline: float
+    ) -> Optional[dict]:
+        """Poll until the first assistant response not in ``known_ids`` is complete.
+
+        Returns ``None`` when the REST read keeps failing or the deadline
+        passes, so the caller can fall back to the DOM.
+        """
+        failures = 0
+        while time.monotonic() < deadline:
+            page.wait_for_timeout(_POLL_MS)
+            conv_id = _conv_id_from_url(page.url)
+            if not conv_id:
+                continue  # new chat still redirecting to /c/<uuid>
+            try:
+                fresh = [
+                    n["responseId"]
+                    for n in self._response_nodes(page, conv_id)
+                    if str(n.get("sender", "")).lower() != "human"
+                    and n.get("responseId") not in known_ids
+                ]
+                if not fresh:
+                    failures = 0
+                    continue
+                responses = self._api(
+                    page, f"{_API}/{conv_id}/load-responses",
+                    {"responseIds": fresh[-1:]},
+                ).get("responses") or []
+            except Exception as e:  # noqa: BLE001 — navigation races, HTTP errors
+                failures += 1
+                logger.debug("[grok_fast] REST read failed (%d): %s", failures, e)
+                if failures >= _MAX_API_FAILURES:
+                    logger.warning("[grok_fast] REST read failing repeatedly: %s", e)
+                    return None
+                continue
+            failures = 0
+            resp = responses[0] if responses else {}
+            if resp.get("partial") or not (resp.get("message") or resp.get("generatedImageUrls")):
+                continue  # still generating
+            return {
+                "response": _strip_thought_prefix(resp.get("message") or ""),
+                "url": f"https://grok.com/c/{conv_id}",
+                "conversation_id": conv_id,
+            }
+        return None
 
     # ── Public API ──────────────────────────────────────────
 
@@ -507,16 +540,16 @@ class GrokFastClient:
         timeout_s: int = 120,
         on_delta=None,
     ) -> dict:
-        """Send a message via React-onSubmit + capture via fetch hook.
+        """Send a message via Grok's own submit; read the reply over REST.
 
         ``on_delta``: optional callable ``(text: str) -> None`` invoked with each
         incremental chunk of the reply as it renders (real streaming). Only the
-        DOM-poll capture paths stream; the one-shot network-capture path returns
-        whole (the caller reconciles any un-streamed remainder).
+        DOM-poll capture paths stream; the REST read returns the reply whole
+        (the caller reconciles any un-streamed remainder).
 
-        Raises ``RuntimeError`` on any structural failure (hook didn't
-        install, onSubmit not found, response timeout). Callers should
-        catch and fall back to ``GrokClient.send``.
+        Raises ``RuntimeError`` only when nothing was sent (setText or the
+        submit chain failed), so the caller may safely fall back and
+        re-send via ``GrokClient.send``.
         """
         sk = session_key or self._client.DEFAULT_SESSION
         url_target = (
@@ -538,13 +571,27 @@ class GrokFastClient:
             prev_count = page.evaluate(
                 "(sel) => document.querySelectorAll(sel).length", assistant_sel,
             )
+            # Responses already in this chat, so the REST poll can tell the
+            # new reply from old ones. None = unknown: skip the REST read
+            # rather than risk returning an earlier reply.
+            known_ids: Optional[set[str]] = set()
+            current = _conv_id_from_url(page.url)
+            if current:
+                try:
+                    known_ids = {n["responseId"] for n in self._response_nodes(page, current)}
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "[grok_fast] could not list existing responses (%s); "
+                        "reading the reply from the DOM", e,
+                    )
+                    known_ids = None
 
             # ── Preferred path: the selectorless extension toolkit ──────────
             # Use the extension's structural button finder + anchor/baseline
             # capture instead of grok-specific selectors. Only taken when the
             # toolkit functions are actually present on the page (extension
             # loaded + a build that exposes them); otherwise we drop to the
-            # bespoke network path below. ``UC_GROK_DISABLE_TOOLKIT=1`` forces
+            # bespoke path below. ``UC_GROK_DISABLE_TOOLKIT=1`` forces
             # the bespoke path (escape hatch for regressions).
             toolkit_ready = bool(page.evaluate(
                 "() => typeof window.__UC_grokToolkitReady === 'function' "
@@ -561,7 +608,7 @@ class GrokFastClient:
                     # to the bespoke path (its setText replaces, not appends).
                     logger.warning(
                         "[grok_fast] toolkit path pre-submit failure (%s); "
-                        "falling back to bespoke network path", e,
+                        "falling back to bespoke path", e,
                     )
             elif not toolkit_ready:
                 logger.info(
@@ -569,88 +616,38 @@ class GrokFastClient:
                     "using bespoke path"
                 )
 
-            # ``submitted`` gates the failure handling: once the message is
-            # confirmed sent (composer cleared), a later timeout must NOT
-            # bubble up as a RuntimeError — that would make send_with_fallback
-            # re-type the whole message (the double-paste). We poll the DOM
-            # for the reply instead.
-            submitted = False
-            # The network response (if it matches _CHAT_URL_RE at all) fires
-            # within seconds of submit. If the matcher misses — e.g. a
-            # logged-in continue-chat whose response URL doesn't match — there
-            # is no point waiting the full generation budget here; cap this
-            # phase short and let _poll_dom_response carry the long wait. The
-            # DOM poll watches the actual generating signal, so capping the
-            # network phase costs nothing but saves the wasted minutes.
-            net_capture_s = min(timeout_s, int(os.environ.get("UC_GROK_NET_CAPTURE_S", "45")))
-            try:
-                # Set up the network listener BEFORE triggering — Playwright
-                # buffers matching responses from the moment the `with` opens.
-                with page.expect_response(
-                    lambda r: bool(_CHAT_URL_RE.search(r.url)),
-                    timeout=net_capture_s * 1000,
-                ) as resp_info:
-                    typed = page.evaluate(
-                        "(args) => window.__UC_setText && window.__UC_setText(args[0], args[1])",
-                        ["div.ProseMirror", message],
-                    ) or {}
-                    if not typed.get("success"):
-                        raise RuntimeError(
-                            f"GrokFastClient: setText failed ({typed.get('error')})"
-                        )
-                    # Settle grok's async paste->file conversion and recover if
-                    # it swallowed the whole message into a chip (kayla/ceraph
-                    # empty-render trap). Shared with the toolkit path.
-                    self._handle_chips(page, message)
-                    # Trigger submit (button → React onSubmit → Enter), verified
-                    # by the composer clearing. Only then is the send real.
-                    trig = page.evaluate("() => window.__UC_grokTriggerSubmit()") or {}
-                    if not trig.get("ok"):
-                        raise RuntimeError(f"GrokFastClient: trigger failed: {trig}")
-                    submitted = True
-                response = resp_info.value
-            except RuntimeError:
-                # setText / trigger genuinely failed: nothing was sent, so the
-                # caller may safely fall back and re-send.
-                raise
-            except Exception as e:
-                # Network capture missed/timed out. If we already submitted,
-                # the message is in flight — read the reply from the DOM
-                # rather than letting the caller re-type it.
-                if not submitted:
-                    raise RuntimeError(f"GrokFastClient: pre-submit failure: {e}")
-                logger.warning(
-                    "[grok_fast] network capture missed after confirmed submit "
-                    "(%s); polling DOM for response (no re-send)", e,
+            typed = page.evaluate(
+                "(args) => window.__UC_setText && window.__UC_setText(args[0], args[1])",
+                ["div.ProseMirror", message],
+            ) or {}
+            if not typed.get("success"):
+                raise RuntimeError(
+                    f"GrokFastClient: setText failed ({typed.get('error')})"
                 )
-                return self._poll_dom_response(
-                    page, assistant_sel, prev_count, timeout_s, on_delta=on_delta
-                )
+            # Settle grok's async paste->file conversion and recover if
+            # it swallowed the whole message into a chip (kayla/ceraph
+            # empty-render trap). Shared with the toolkit path.
+            self._handle_chips(page, message)
+            # Trigger submit (button → React onSubmit → Enter), verified
+            # by the composer clearing. Only then is the send real.
+            trig = page.evaluate("() => window.__UC_grokTriggerSubmit()") or {}
+            if not trig.get("ok"):
+                raise RuntimeError(f"GrokFastClient: trigger failed: {trig}")
 
-            try:
-                body = response.text()
-            except Exception as e:
-                raise RuntimeError(f"GrokFastClient: response.text() failed: {e}")
-            logger.debug(
-                "[grok_fast] matched response: url=%s status=%s body_len=%d",
-                response.url[:140], response.status, len(body),
+            # Sent. From here on never raise RuntimeError: send_with_fallback
+            # would re-type the message (the double-paste).
+            deadline = time.monotonic() + timeout_s
+            if known_ids is not None:
+                reply = self._await_api_reply(page, known_ids, deadline)
+                if reply is not None:
+                    return reply
+                logger.warning(
+                    "[grok_fast] REST read gave no reply; reading it from the DOM (no re-send)"
+                )
+            remaining = max(1, int(deadline - time.monotonic()))
+            return self._poll_dom_response(
+                page, assistant_sel, prev_count, remaining, on_delta=on_delta
             )
-            text = _extract_assistant_text(body)
-            conv_id = _extract_conversation_id(body) or _conv_id_from_url(response.url)
-            # Falling back to the page URL covers continue-chat where the
-            # response body's conversation block isn't always present.
-            if not conv_id:
-                conv_id = _conv_id_from_url(page.url)
-            final_url = (
-                f"https://grok.com/c/{conv_id}"
-                if conv_id
-                else page.url
-            )
-            return {
-                "response": text,
-                "url": final_url,
-                "conversation_id": conv_id,
-            }
 
     # ── Selectorless toolkit path ───────────────────────────────────
 
@@ -792,8 +789,8 @@ class GrokFastClient:
         setText). Submit is sourced from the structural button finder
         (``__UC_findButtons``) rather than a grok arrow-svg-path; capture locks
         the toolkit response-watch attribute onto the stable ``assistant-message``
-        testid and reads via ``__UC_readLocked`` rather than the network
-        ``expect_response``.
+        testid and reads via ``__UC_readLocked`` rather than the REST read
+        the bespoke path uses.
 
         Contract mirrors the bespoke path: ``RuntimeError`` means a pre-submit
         failure (nothing sent — caller may safely re-send); a confirmed-submit
@@ -889,7 +886,7 @@ class GrokFastClient:
             # While only grok's reasoning banner is showing (no real answer yet),
             # keep waiting — never let the banner settle as the reply (the cause
             # of the "Thinking about your request — Ns" only-banner captures).
-            if cur and _is_reasoning_banner(_strip_thought_prefix(cur)):
+            if cur and _is_reasoning_banner(_clean_dom_reply(cur)):
                 last_activity = now
                 last_text = ""
                 stable = 0
@@ -912,7 +909,7 @@ class GrokFastClient:
                 bailed = True
                 break
 
-        resp = _strip_thought_prefix(last_text)
+        resp = _clean_dom_reply(last_text)
         if not resp:
             diag = self._capture_empty_diagnostic(page, assistant_sel)
             logger.warning(
@@ -932,9 +929,8 @@ class GrokFastClient:
     ) -> dict:
         """Read the assistant reply from the DOM after a confirmed submit.
 
-        Used when the network-level ``expect_response`` capture misses (slow
-        large-context renders can exceed the listener window even though the
-        send succeeded). Watches Grok's ``stop`` button as the generating
+        Used when the REST read fails after the submit is confirmed.
+        Watches Grok's ``stop`` button as the generating
         signal — present while streaming, gone when complete — then returns
         the last assistant block. Never re-types: the message is already in
         flight, so this path exists precisely to avoid the double-paste.
@@ -997,7 +993,7 @@ class GrokFastClient:
                     except Exception:  # noqa: BLE001 — never let a sink break capture
                         pass
             # Reasoning-banner-only text isn't a real answer yet — keep waiting.
-            if cur and _is_reasoning_banner(_strip_thought_prefix(cur)):
+            if cur and _is_reasoning_banner(_clean_dom_reply(cur)):
                 last_text = ""
                 stable = 0
                 continue
@@ -1017,7 +1013,7 @@ class GrokFastClient:
                 last_text = cur
 
         final_url = page.url
-        resp = _strip_thought_prefix(last_text)
+        resp = _clean_dom_reply(last_text)
         if not resp:
             # Empty reply (bail or timeout): capture what Grok actually shows so
             # the failure is explainable (silent refusal vs visible moderation
@@ -1111,8 +1107,8 @@ def send_with_fallback(
 
     Blind-mode (``wait_for_response=False``) bypasses the fast path
     entirely — the DOM path already returns in ~1.3 s for that case,
-    and the fast path's ``expect_response`` wait isn't useful when we
-    don't care about the reply.
+    and the fast path's reply wait isn't useful when we don't care about
+    the reply.
     """
     from uc_browser.sites.grok import get_grok_client
     if not wait_for_response:

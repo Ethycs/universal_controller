@@ -134,6 +134,9 @@ _THOUGHT_PREFIX_RE = re.compile(
     r"^[ \t]*thought(?:s|[ \t]+for[ \t]+[0-9]+[ \t]*s)\b[^\n]*\r?\n+",
     flags=re.IGNORECASE,
 )
+# The assistant block's innerText opens with the speaker label (seen 2026-11-17).
+# While a reply is forming the block holds the bare label with no newline yet.
+_DOM_LABEL_RE = re.compile(r"^Grok[ \t]*(?:\n+|$)")
 
 
 def _conv_id_from_url(url: str) -> Optional[str]:
@@ -153,6 +156,11 @@ def _conv_id_from_url(url: str) -> Optional[str]:
 def _strip_thought_prefix(text: str) -> str:
     """Drop Grok's ``Thought for Ns`` reasoning prefix if present."""
     return _THOUGHT_PREFIX_RE.sub("", text or "", count=1)
+
+
+def _clean_dom_reply(text: str) -> str:
+    """Assistant text scraped from the DOM, minus the ``Grok`` label and reasoning prefix."""
+    return _strip_thought_prefix(_DOM_LABEL_RE.sub("", text or "", count=1))
 
 
 def _normalize_url(url_or_id: str) -> str:
@@ -521,7 +529,7 @@ class GrokClient:
 
             result_url = page.url
             return {
-                "response": _strip_thought_prefix(last_text),
+                "response": _clean_dom_reply(last_text),
                 "url": result_url,
                 "conversation_id": _conv_id_from_url(result_url),
             }
@@ -557,7 +565,7 @@ class GrokClient:
             ) or []
             # Strip Grok's reasoning prefix from assistant blocks.
             cleaned = [
-                {**m, "text": _strip_thought_prefix(m["text"])} if m.get("role") == "assistant"
+                {**m, "text": _clean_dom_reply(m["text"])} if m.get("role") == "assistant"
                 else m
                 for m in messages
             ]
