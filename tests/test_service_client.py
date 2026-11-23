@@ -814,6 +814,42 @@ def test_open_and_open_with_intercept_use_new_page_and_keep_local_navigation(sta
     assert [c.path for c in rig.svc.calls].count("/windows/default/pages") == 2
 
 
+@pytest.mark.parametrize("intercept", [False, True])
+@pytest.mark.parametrize("service_mode", [False, True])
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_failed_open_closes_unreturned_page_and_preserves_error(
+    started, monkeypatch, intercept, service_mode, cleanup_fails,
+):
+    uc = started.uc if service_mode else UCBrowser()
+    if not service_mode:
+        uc._context = started.ctx
+    original = PlaywrightTimeout("navigation timed out")
+    created, closed = [], []
+
+    def fail_navigation(page, url, **kwargs):
+        created.append(page)
+        raise original
+
+    def close(page):
+        closed.append(page)
+        if cleanup_fails:
+            raise PlaywrightError("browser disconnected during cleanup")
+        page.closed = True
+
+    monkeypatch.setattr(FakePage, "goto", fail_navigation)
+    monkeypatch.setattr(FakePage, "close", close, raising=False)
+    with pytest.raises(PlaywrightTimeout) as exc:
+        if intercept:
+            uc.open_with_intercept("https://x.test/slow", r"/api/")
+        else:
+            uc.open("https://x.test/slow")
+    assert exc.value is original
+    assert len(created) == 1 and closed == created
+    assert cleanup_fails or created[0].is_closed()
+    assert not started.ctx.closed  # the client's context must survive
+    assert started.uc._service is not None  # no client-wide release
+
+
 # ── UCBrowser: controls ──────────────────────────────────────────────────
 
 

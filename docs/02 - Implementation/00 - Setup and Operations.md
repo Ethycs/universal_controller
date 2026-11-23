@@ -30,7 +30,7 @@ Produces `extension/dist/uc-extension.js` (~225 KB) — the bundle loaded into C
 pixi run -e dev test        # = pytest -v tests/
 ```
 
-Independent Linux baseline on 2026-11-23: **102 passed, 1 skipped, 1 failed**. The failure was the committed synthetic MHTML captured from `about:blank`, which Chromium build 1255 loaded as an empty document. The generator now captures a routed document with a real URL; regenerated fixtures passed `pixi run -e dev pytest -q tests/test_bench_runner.py` (**1 passed**). The full suite was not repeated after this fix.
+Independent Linux baseline on 2026-11-23 **with the extension bundle built**: **102 passed, 1 skipped, 1 failed**. The failing test was `tests/test_bench_runner.py::test_synthetic_fixtures_score_correctly`: Chromium build 1255 loaded synthetic MHTML captured from `about:blank` as an empty document. The generator now captures a routed document with a real URL; regenerated fixtures passed `pixi run -e dev pytest -q tests/test_bench_runner.py` (**1 passed**). The full suite was not repeated after this fix. PBX 210-1001's earlier **100 passed, 4 skipped** was without the bundle: three bundle-dependent checks did not run, including this test, so it is not a regression against that baseline. See Build Spec §8 for the corrected comparison and separately verified native injection.
 
 ## 4. Benchmark
 

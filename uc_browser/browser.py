@@ -838,22 +838,30 @@ class UCBrowser:
         per-step PNG screenshots are written alongside each JSONL row.
         """
         page = self.new_page()
-        if tracer is not None and _nav_trace_attach is not None:
-            _nav_trace_attach(tracer, page, capture=capture)
-            # Initial "open" record happens BEFORE goto — no DOM yet to
-            # snapshot, so no image even when capture is non-None.
-            tracer.record(kind="open", url=url, parent=None)
-        page.goto(url, timeout=self.timeout_ms, wait_until="domcontentloaded")
-        page.wait_for_timeout(wait_ms)
-        # After goto+settle, take a "loaded" screenshot when capture is on
-        # so the trace has at least one image even if no framenavigated
-        # event fires (single-page apps, hash routers, etc.).
-        if tracer is not None and capture is not None:
-            tracer.record_with_screenshot(
-                kind="framenavigated", url=page.url, page=page,
-                capture=capture, parent=1, label="initial-load",
-            )
-        return page
+        try:
+            if tracer is not None and _nav_trace_attach is not None:
+                _nav_trace_attach(tracer, page, capture=capture)
+                # Initial "open" record happens BEFORE goto — no DOM yet to
+                # snapshot, so no image even when capture is non-None.
+                tracer.record(kind="open", url=url, parent=None)
+            page.goto(url, timeout=self.timeout_ms, wait_until="domcontentloaded")
+            page.wait_for_timeout(wait_ms)
+            # After goto+settle, take a "loaded" screenshot when capture is on
+            # so the trace has at least one image even if no framenavigated
+            # event fires (single-page apps, hash routers, etc.).
+            if tracer is not None and capture is not None:
+                tracer.record_with_screenshot(
+                    kind="framenavigated", url=page.url, page=page,
+                    capture=capture, parent=1, label="initial-load",
+                )
+            return page
+        except BaseException:
+            # Ownership reaches the caller only when we return the page.
+            try:
+                page.close()
+            except Exception as exc:
+                logger.debug("page cleanup after failed open: %s", exc)
+            raise
 
     def open_with_intercept(
         self,
@@ -884,36 +892,43 @@ class UCBrowser:
 
         page = self.new_page()
 
-        if tracer is not None and _nav_trace_attach is not None:
-            _nav_trace_attach(tracer, page, capture=capture)
-            tracer.record(kind="open", url=url, parent=None)
+        try:
+            if tracer is not None and _nav_trace_attach is not None:
+                _nav_trace_attach(tracer, page, capture=capture)
+                tracer.record(kind="open", url=url, parent=None)
 
-        captured: list[tuple[str, str]] = []
-        pattern = _re.compile(api_pattern)
+            captured: list[tuple[str, str]] = []
+            pattern = _re.compile(api_pattern)
 
-        def _on_response(response):
+            def _on_response(response):
+                try:
+                    if not pattern.search(response.url):
+                        return
+                    content_type = response.headers.get("content-type", "")
+                    if "json" not in content_type:
+                        return
+                    body = response.text()
+                    if len(body) > 100:
+                        captured.append((response.url, body))
+                except Exception as e:
+                    logger.debug("response handler error for %s: %s", response.url, e)
+
+            page.on("response", _on_response)
+            page.goto(url, timeout=self.timeout_ms, wait_until="domcontentloaded")
+            page.wait_for_timeout(wait_ms)
+            # See open(): post-goto snapshot guarantees one image per session.
+            if tracer is not None and capture is not None:
+                tracer.record_with_screenshot(
+                    kind="framenavigated", url=page.url, page=page,
+                    capture=capture, parent=1, label="initial-load",
+                )
+            return page, captured
+        except BaseException:
             try:
-                if not pattern.search(response.url):
-                    return
-                content_type = response.headers.get("content-type", "")
-                if "json" not in content_type:
-                    return
-                body = response.text()
-                if len(body) > 100:
-                    captured.append((response.url, body))
-            except Exception as e:
-                logger.debug("response handler error for %s: %s", response.url, e)
-
-        page.on("response", _on_response)
-        page.goto(url, timeout=self.timeout_ms, wait_until="domcontentloaded")
-        page.wait_for_timeout(wait_ms)
-        # See open(): post-goto snapshot guarantees one image per session.
-        if tracer is not None and capture is not None:
-            tracer.record_with_screenshot(
-                kind="framenavigated", url=page.url, page=page,
-                capture=capture, parent=1, label="initial-load",
-            )
-        return page, captured
+                page.close()
+            except Exception as exc:
+                logger.debug("page cleanup after failed intercepted open: %s", exc)
+            raise
 
     def _wait_ready(self, page, timeout_ms: int = 5000) -> bool:
         """Wait for the UC extension to be loaded on this page."""

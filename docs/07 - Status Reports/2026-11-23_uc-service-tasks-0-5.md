@@ -67,6 +67,14 @@ After the initial tasks 0–5 delivery, the owner authorized review, implementat
 
 Verification: the focused client/core/fetch run produced **102 passed, 1 failed** (the redirect assumption). After adding the explicit origin guard, the affected real-Chromium fetch file produced **3 passed**. These checks include cross-origin cookie inclusion, exact same-origin referrers, no later navigation, and an uninterrupted stream while another request waits on its page. The other 100 client/core tests passed in the first run; they were not repeated after the fetch-only fix. No live accounts, profiles or deployment were used.
 
+## 6. Authorized navigation-cleanup follow-up
+
+`open()` and `open_with_intercept()` now close an unreturned page best-effort if navigation or another post-creation step fails, preserving the original exception even if cleanup also fails. Neither releases the whole client nor closes its context; successful calls and public signatures are unchanged.
+
+Focused verification: `pixi run -e dev pytest -q tests/test_service_client.py -k 'failed_open or open_and_open_with_intercept'` → **9 passed, 54 deselected**. The regression matrix covers both opening methods, service and in-process page creation, and successful/failed cleanup; the existing successful-open test also passed. This run uses the loopback fixture service and fake Playwright, not live accounts.
+
+Recorded PBX 210-1001's baseline correction in Build Spec §8 and Setup §3: its 100/4 run had no extension bundle and skipped three bundle-dependent checks. Our built-bundle 102/1/1 run exposed `test_synthetic_fixtures_score_correctly`, later repaired by capturing routed-URL MHTML. This was not a regression against a previously passing Linux fixture test. No baseline or live injection checks were rerun for this documentation correction.
+
 ## Verification
 
 ```bash

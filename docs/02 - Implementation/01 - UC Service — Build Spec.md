@@ -150,8 +150,8 @@ Selected by environment, so consumers change configuration and not code.
 | `new_page()` | **new public method, in both modes.** Service mode: `POST …/pages`, then resolve the target id to a local `Page` (E4). In-process: `self._context.new_page()` plus the stealth plugin, which is what consumers do by hand today |
 | `_context` | the real `browser.contexts[0]`, unwrapped. A page a consumer makes with `_context.new_page()` works and is stealthed, but is unleased: revocation does not reach it and only the sweep closes it (§5) |
 | `_stealth_plugin` | `None`. The window's context already has stealth (row 19) |
-| `open(url, …)` | `self.new_page()` → attach the caller's tracer if given → `page.goto` → wait, exactly as now |
-| `open_with_intercept(…)` | same page creation; routing and listeners stay local (E5) |
+| `open(url, …)` | `self.new_page()` → attach the caller's tracer if given → `page.goto` → wait. If any step fails before returning the page, close that page best-effort and re-raise the original exception, without releasing the client or closing its context |
+| `open_with_intercept(…)` | same page creation and failure cleanup; routing and listeners stay local (E5). Both opening methods retain their public signatures; cleanup also applies in-process |
 | the 39 page-taking controls | read the page's target id; `POST …/controls/{name}`; return `result`, except callable orchestration described in §3 |
 | a control on an `engine: none` window | `UCBrowser` reads `offers` from the start response and runs the original body locally when `control` is absent, without a refusal round trip. Unexpected 409 `no_controls` still triggers and remembers the same fallback. Nested controls stay local under a scoped recursion guard. `ServiceClient` instead raises `ControlsUnavailable`. All 39 original outcomes were measured: `docs/08 - Analysis/01 - Engine-Absent Control Behavior.md` |
 | `close()` | `DELETE /clients/{id}`; disconnect. Never `context.close()` |
@@ -253,9 +253,9 @@ Before first start on a host that has run the old arrangement, make sure no brow
 | Live | revocation unwinds `page.wait_for_timeout(600000)` after `DELETE /clients?label=…` | verified: `TargetClosedError` in 0.04 s |
 | Live | no-registration cookie-bearing fetch, retained origin page, incremental UTF-8 stream, HTML/PNG/MHTML snapshots | verified against real Chromium; native first-control injection and second-launch `profile_held` also verified |
 
-Baseline before any change: on `main` at `5e3dd0a` the suite is **100 passed, 4 skipped** (run 2026-11-23 on Linux in `event_tool`'s environment).
+Historical baseline reported by PBX 210-1001: on `main` at `5e3dd0a`, **100 passed, 4 skipped**, run 2026-11-23 on Linux in `event_tool`'s environment **without a built extension bundle**. Three skips were bundle-dependent checks in `test_bench_runner.py`, `test_reverse_loop.py` and `test_vendor_signatures.py`; the fourth was Grok sign-in. The synthetic fixture test did not run in that baseline, so its later failure is not a regression against a passing Linux result.
 
-Independent baseline: 102 passed, 1 skipped, 1 failed; repaired synthetic MHTML capture passed its targeted test (Setup §3). Integrated service/client/window/health tests: **115 passed**. Startup-failure and flattened-Chrome-title regressions: **3 passed** separately. The real-service probe passed every model assertion; rows 13 (shutdown) and 19 (before/after stealth) are baseline-only. Graceful shutdown was exercised separately, and the live client saw `navigator.webdriver=False`.
+Independent baseline **with the bundle built**: **102 passed, 1 skipped, 1 failed**, specifically `tests/test_bench_runner.py::test_synthetic_fixtures_score_correctly`. Chromium loaded the synthetic `about:blank` MHTML as an empty document; capturing a routed real URL and regenerating the fixtures fixed the targeted test (**1 passed**; Setup §3). The full baseline suite was not repeated afterward. Integrated service/client/window/health tests: **115 passed**. Startup-failure and flattened-Chrome-title regressions: **3 passed** separately. Real native engine injection and the service probe passed: this was a fixture-capture problem, not an unresolved injected-engine failure. Probe rows 13 (shutdown) and 19 (before/after stealth) remain baseline-only; graceful shutdown was exercised separately, and the live client saw `navigator.webdriver=False`.
 
 ## 9. Moving consumers
 
