@@ -1,3 +1,6 @@
+# UC-STD-DOCS v0 — Agentic Technique (Documentation Style)
+**Standard ID:** UC-STD-DOCS v0 · **Status:** Normative — governs every doc under `docs/` · **Date:** 2026-11-23 (text unchanged from the repo-root `Agentic Technique Master.md` it replaces) · **Origin:** portable style guide; its worked examples reference the `symcrash` repo, not this one
+
 Artificial Intelligence can be a tool that frees us from reinventing the wheel, or it can be a yolk that keeps us in mundane tasks forever.
 
 This is a **style guide**: a reusable way to work with LLM agents so that what comes out the other end is durable engineering evidence, not chat exhaust. It is written to be portable across projects. Concrete examples are drawn from one repository (`symcrash`) and are always marked as _examples_ — the rules themselves carry no project-specific assumptions.

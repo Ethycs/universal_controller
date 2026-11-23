@@ -69,7 +69,13 @@ def main() -> int:
         ctx = browser.new_context(viewport={"width": 1440, "height": 900})
         for name, kind, html, truth in FIXTURES:
             page = ctx.new_page()
-            page.set_content(html, wait_until="load")
+            # MHTML needs a real document location; recent Chromium loads
+            # snapshots of about:blank as an empty document.
+            url = f"https://synthetic.test/{name}"
+            page.route(url, lambda route, request, body=html: route.fulfill(
+                content_type="text/html", body=body,
+            ))
+            page.goto(url, wait_until="load")
             cdp = ctx.new_cdp_session(page)
             snap = cdp.send("Page.captureSnapshot", {"format": "mhtml"})
             out_dir = FIXTURES_DIR / name

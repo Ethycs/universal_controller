@@ -1,7 +1,7 @@
 # Setup and Operations
 
 **Status**: CURRENT
-**Date**: 2026-08-27
+**Date**: 2026-11-23
 **Applies to**: standing the repo up standalone (pixi workspace at repo root) and running its services
 **Depends on**: `pyproject.toml` (pixi tasks), `litellm.config.yaml` (proxy config), `docs/01 - Design/00 - Chat-Window-to-API Design.md` (why the pieces exist)
 
@@ -12,14 +12,14 @@ cd universal_controller
 pixi install
 ```
 
-The repo is a self-contained pixi workspace (win-64, Python 3.12); the editable install pulls the `adapter` extras (litellm, mcp, stealth, rookiepy). It also works as a git submodule under a parent repo — the two pixi workspaces are independent.
+The repo is a self-contained pixi workspace (win-64 and linux-64, Python 3.12, Node.js 22); the editable install pulls the `adapter` extras (litellm, mcp, stealth, rookiepy). Playwright is resolved from PyPI at 1.65.2 or newer; do not add conda `playwright-stealth`, which can pin an older conda Playwright. It also works as a git submodule under a parent repo — the two pixi workspaces are independent.
 
 ## 2. Build the extension
 
 ```bash
-cd extension
-npm install
-npx rollup -c
+pixi run playwright install chromium
+pixi run npm --prefix extension ci
+pixi run npm --prefix extension run build
 ```
 
 Produces `extension/dist/uc-extension.js` (~225 KB) — the bundle loaded into Chromium and injected into bench fixtures. Rebuild after any change to `src/`.
@@ -30,7 +30,7 @@ Produces `extension/dist/uc-extension.js` (~225 KB) — the bundle loaded into C
 pixi run -e dev test        # = pytest -v tests/
 ```
 
-Expected state as of 2026-08-27: **64 passed + 1 skipped** (validated).
+Independent Linux baseline on 2026-11-23: **102 passed, 1 skipped, 1 failed**. The failure was the committed synthetic MHTML captured from `about:blank`, which Chromium build 1255 loaded as an empty document. The generator now captures a routed document with a real URL; regenerated fixtures passed `pixi run -e dev pytest -q tests/test_bench_runner.py` (**1 passed**). The full suite was not repeated after this fix.
 
 ## 4. Benchmark
 

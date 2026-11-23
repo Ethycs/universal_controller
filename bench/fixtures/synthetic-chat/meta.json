@@ -2,7 +2,7 @@
   "name": "synthetic-chat",
   "url": "synthetic://synthetic-chat",
   "kind": "chat",
-  "captured_at": "2026-08-28T03:07:24.329744+00:00",
+  "captured_at": "2026-11-23T22:52:18.375574+00:00",
   "truth": {
     "input": [
       "[data-uc-truth=\"input\"]"
