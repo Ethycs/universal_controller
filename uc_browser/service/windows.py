@@ -34,6 +34,7 @@ import concurrent.futures as cf
 import inspect
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -70,7 +71,10 @@ LAUNCH_TIMEOUT_S = 120.0
 INFO_WAIT_S = 5.0
 CONTROL_QUEUE_TIMEOUT_S = 30.0
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,47}")
-_SPEC_KEYS = frozenset({"browser", "engine", "profile", "state_file", "stealth", "control_workers", "lazy"})
+_SPEC_KEYS = frozenset(
+    {"browser", "engine", "profile", "state_file", "stealth", "control_workers", "lazy", "queue_timeout_s"}
+)
+_UNSET = object()
 
 
 class ConfigError(ValueError):
@@ -90,6 +94,7 @@ class WindowSpec:
     stealth: bool | None = None  # None: True for chromium, else False
     control_workers: int = 2
     lazy: bool = True
+    queue_timeout_s: float = CONTROL_QUEUE_TIMEOUT_S
 
     def __post_init__(self):
         n = self.name
@@ -108,6 +113,10 @@ class WindowSpec:
             raise ConfigError(f"window {n}: profile is required")
         if not isinstance(self.lazy, bool):
             raise ConfigError(f"window {n}: lazy must be a boolean")
+        qt = self.queue_timeout_s
+        if isinstance(qt, bool) or not isinstance(qt, (int, float)) or not math.isfinite(qt) or qt <= 0:
+            raise ConfigError(f"window {n}: queue_timeout_s must be a finite number > 0")
+        object.__setattr__(self, "queue_timeout_s", float(qt))
         cw = self.control_workers
         if isinstance(cw, bool) or not isinstance(cw, int) or not 1 <= cw <= MAX_CONTROL_WORKERS:
             raise ConfigError(f"window {n}: control_workers must be an integer in 1..{MAX_CONTROL_WORKERS}")
@@ -164,7 +173,11 @@ def _parse_spec(name: str, raw) -> WindowSpec:
     for key in ("browser", "engine"):
         if key in raw and not isinstance(raw[key], str):
             raise ConfigError(f"window {name!r}: {key} must be a string")
-    kwargs = {k: raw[k] for k in ("browser", "engine", "stealth", "control_workers", "lazy") if k in raw}
+    kwargs = {
+        k: raw[k]
+        for k in ("browser", "engine", "stealth", "control_workers", "lazy", "queue_timeout_s")
+        if k in raw
+    }
     return WindowSpec(
         name=name,
         profile=Path(profile),
@@ -686,6 +699,7 @@ class Window:
             "offers": self.spec.offers,
             "cdp": self.cdp if running else None,
             "pages": pages if running else [],
+            "queue_timeout_s": self.spec.queue_timeout_s,
         }
 
     # worker jobs
@@ -693,11 +707,15 @@ class Window:
         o = self._owner
         return o.lanes if o is not None and o.phase == _RUNNING and o.accepting else None
 
-    def work(self, fn, *, long: bool = False, queue_timeout: float = CONTROL_QUEUE_TIMEOUT_S) -> cf.Future:
+    def work(self, fn, *, long: bool = False, queue_timeout=_UNSET) -> cf.Future:
         """Run ``fn(runtime)`` on a worker with its own Playwright and CDP
         attachment (``long=True``: the separate lane for long operations).
-        ``queue_timeout`` bounds the wait for a free worker (``busy``, 503).
+        ``queue_timeout`` bounds the wait for a free worker (``busy``, 503);
+        omitted, it is the window's configured ``queue_timeout_s``; an explicit
+        value, including ``None`` (no deadline), is passed through unchanged.
         Windows without CDP run it on the owner thread instead."""
+        if queue_timeout is _UNSET:
+            queue_timeout = self.spec.queue_timeout_s
         if not self.spec.has_cdp:
             return self.owner(fn)
         lanes = self._lanes()

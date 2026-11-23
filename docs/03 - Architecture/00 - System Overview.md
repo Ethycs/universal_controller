@@ -89,10 +89,10 @@ With `UC_SERVICE_URL`, `UCBrowser` registers a pid-bound client, attaches over C
 | Component | Owns |
 |---|---|
 | `windows.py`, `profiles.py` | validated window specs, owner threads, lazy launch/relaunch, process/profile ownership and graceful shutdown |
-| `workers.py` | thread-local Playwright runtimes; bounded short/long lanes; target cache and event pumping; on-demand native engine injection |
+| `workers.py` | thread-local Playwright runtimes; bounded short/long lanes with per-window `queue_timeout_s`; target cache and event pumping; on-demand native engine injection |
 | `leases.py` | pid/start-time client identities, page leases, label revocation, dead-client reaping and raw-page sweep |
-| `operations.py`, `api.py` | JSON/NDJSON HTTP operations; retained service-owned fetch page per origin; cookies and HTML/PNG/MHTML |
-| `client.py`, `targets.py` | browser-independent HTTP client; separately loaded CDP target resolver for `UCBrowser` |
+| `operations.py`, `api.py` | JSON/NDJSON HTTP operations; retained service-owned fetch page per origin, serialized requests with explicit credentials and per-request referrer (no same-origin re-navigation); cookies and HTML/PNG/MHTML |
+| `client.py`, `targets.py` | browser-independent HTTP client; finite control read budgets include discovered queue allowance and margin, default unbounded; separately loaded CDP target resolver for `UCBrowser` |
 
 The owner closes leased pages independently of a blocked client. Measured revocation: `wait_for_timeout(600000)` failed with `TargetClosedError` in 0.04 s. Service-owned fetch pages survive the zero-client sweep. Each active window can use up to one owner plus two lanes of `control_workers` drivers.
 

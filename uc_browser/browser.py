@@ -710,7 +710,7 @@ class UCBrowser:
         self._client_id = client_id
         self._service_window = window
         self._targets = TargetResolver(context)
-        self._no_controls = set()
+        self._no_controls = {window} if "control" not in info["offers"] else set()
         self._service = client  # last: from here on controls dispatch remotely
         logger.info("Attached to UC service %s window %r as client %s.", url, window, client_id)
 
@@ -1908,9 +1908,9 @@ class UCBrowser:
 # (its callable is required); ``scroll_feed`` whenever ``on_item`` is given.
 _CALLBACK_CONTROLS = {"scan_action": "action", "scroll_feed": "on_item"}
 
-# Per-thread set of UCBrowsers currently running a control body locally
-# because the window has no engine (409 ``no_controls``). Their nested
-# controls must run in-process too, not POST and 409 again.
+# Per-thread set of UCBrowsers running a control body locally because their
+# window does not offer controls (or returned 409 ``no_controls``). Nested
+# controls must stay in-process too.
 _local_control_scope = threading.local()
 
 

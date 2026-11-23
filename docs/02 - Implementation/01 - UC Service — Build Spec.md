@@ -66,6 +66,7 @@ Read once at service start from `UC_WINDOWS_FILE` (default `data/windows.json`).
 | `state_file` | path, optional | Playwright storage-state JSON whose cookies are added at launch |
 | `stealth` | bool, default `true` for `chromium`, `false` for `chrome` | apply `playwright-stealth` to the context at launch |
 | `control_workers` | int, default 2 | maximum workers in each of the separate short and long lanes; workers start lazily |
+| `queue_timeout_s` | positive finite number, default 30 | worker admission deadline in seconds for each lane; exposed in window discovery so clients can include it in finite read budgets |
 | `lazy` | bool, default `true` | launch on first use rather than at service start |
 
 **Sites**
@@ -89,7 +90,7 @@ HTTP on the status server's port (`UC_STATUS_PORT`, default 4010). JSON in, JSON
 
 | Method and path | Body | Returns | Errors |
 |---|---|---|---|
-| `GET /windows` | — | `{name: {browser, engine, running, offers, cdp, clients: n, pages: [{target_id, url, holder, age_s}]}}`. `offers` lists what this window supports, from `attach`, `control`, `fetch`, `cookies`, `snapshot`, `mhtml`. `cdp` is `ws://127.0.0.1:<port>/devtools/browser/<id>`, or `null` if not launched or if the browser serves none. `holder` is a client id, `session:<site>/<id>`, or `null` | — |
+| `GET /windows` | — | `{name: {browser, engine, running, offers, cdp, queue_timeout_s, clients: n, pages: [{target_id, url, holder, age_s}]}}`. `offers` lists what this window supports, from `attach`, `control`, `fetch`, `cookies`, `snapshot`, `mhtml`. `cdp` is `ws://127.0.0.1:<port>/devtools/browser/<id>`, or `null` if not launched or if the browser serves none. `holder` is a client id or `null`; `session:<site>/<id>` is reserved for task 6 | — |
 | `POST /windows/{w}/start` | — | the window's entry, launched if it was not | 404 `no_such_window`; 409 `profile_held` (a browser the service did not launch holds the profile); 500 `launch_failed` |
 | `POST /clients` | `{pid, label, window}` | `{client_id}` | 400 `bad_pid`; 404 `no_such_window` |
 | `DELETE /clients/{id}` | — | `{closed: n}` — closes every page leased to the client (E9) | 404 `no_such_client` |
@@ -98,14 +99,14 @@ HTTP on the status server's port (`UC_STATUS_PORT`, default 4010). JSON in, JSON
 | `DELETE /windows/{w}/pages/{t}` | — | `{closed: true}` | 404 `no_such_target` |
 | `POST /windows/{w}/cookies` | `{cookies: [...]}` in Playwright format, or `{from_chrome: ["grok.com", ...]}` | `{added: n}` (E13, G15) | 404 `no_such_window`; 501 `chrome_cookies_unavailable` if `rookiepy` is not installed |
 | `GET /windows/{w}/cookies?domain=<d>` | — | `{cookies: [...]}` for that domain, for a caller that will make plain HTTP requests with the window's session | 404 `no_such_window`; 400 `domain_required` |
-| `POST /windows/{w}/fetch` | `{url, method?, headers?, body?, from?, stream?}`. `from` is the page URL the request is made from; default is the origin of `url` | `{status, headers, body}`; with `stream: true`, newline-delimited `{"chunk": "<text>"}` lines then `{"status": n}`. The service keeps one page per (window, origin) for this, creating it on first use (G14; Instagram's replay) | 404 `no_such_window`; 502 `origin_unreachable` |
+| `POST /windows/{w}/fetch` | `{url, method?, headers?, body?, from?, stream?}`. Method defaults to GET. One retained page per (window, origin of `from` or `url`); first navigation uses `from`, else the origin root, and waits for `domcontentloaded`. Later same-origin `from` values become Fetch `referrer`, without navigation. Requests always use `credentials: 'include'`, subject to browser cookie/CORS/referrer policy | `{status, headers, body}`; with `stream: true`, newline-delimited `{"chunk": "<text>"}` lines then `{"status": n}`. Buffered and streamed requests share the retained page's exclusive lock; a changed `from` cannot navigate away from an in-flight request | 404 `no_such_window`; 502 `origin_unreachable` |
 | `POST /windows/{w}/pages/{t}/snapshot` | `{format: "png" \| "html" \| "mhtml", full_page?}` | `{data}` — base64 for `png`, text otherwise | 404 `no_such_target`; 409 `format_unsupported` (`mhtml` outside Chromium and Chrome) |
 
 ### Controls
 
 | Method and path | Body | Returns | Errors |
 |---|---|---|---|
-| `POST /windows/{w}/pages/{t}/controls/{name}` | `{args: [], kwargs: {}}` | `{result}` | 404 `no_such_target` / `no_such_control`; 409 `no_controls` (`engine: none`); 500 `control_failed`; 503 `busy` if no worker frees within the request's timeout |
+| `POST /windows/{w}/pages/{t}/controls/{name}` | `{args: [], kwargs: {}}` | `{result}` | 404 `no_such_target` / `no_such_control`; 409 `no_controls` (`engine: none`); 500 `control_failed`; 503 `busy` if no worker frees within the window's `queue_timeout_s` |
 
 ### Sites
 
@@ -123,10 +124,14 @@ Rules:
 4. **Pages are created blank unless the caller passes `url`.** A caller with an attachment navigates its own page; that is not the service's business.
 5. **`stop` never queues behind a send.** It runs on a control worker against the session's page (G6; row 18).
 6. **The contract is versioned by path only when it breaks.** v0 has no prefix.
-7. **No route requires another.** Fetch, cookies, snapshot and sessions work for a caller that has never registered a client or attached. Registration exists for leases, and only pages are leased.
-8. Worker admission waits at most 30 seconds; a full/expired queue returns 503 `busy`. Browser shutdown fails queued work with 503 `window_stopped`. Bad request schemas/signatures return 400 `bad_arguments`. Fetch defaults to `GET`; a retained page is keyed by the origin of `from` (or `url` when omitted).
+7. **No browser attachment is required.** Fetch, cookies and snapshot **of an existing target** need no client registration. Creating a leased page requires `client_id`; registration is plain HTTP with the caller's pid/label/window, so an HTTP-only caller can register, create and snapshot without a browser library. Future sessions likewise must not require registration or attachment.
+8. Worker admission uses the window's `queue_timeout_s` (default 30 s); a full/expired queue returns 503 `busy`. This is separate from operation duration. Browser shutdown fails queued work with 503 `window_stopped`. Bad request schemas/signatures return 400 `bad_arguments`.
 
 Existing routes (`/`, `/availability`, `/probe/{name}`, `/healthz`, `/mcp`) are unchanged.
+
+**Fetch identity and redirects.** Cookie inclusion is explicit, but does not bypass SameSite, CORS or the page's referrer policy. Before Fetch, the service rejects an explicit `from` whose origin differs from the loaded document (for example after a cross-origin redirect), surfacing `origin_unreachable`. Chromium otherwise accepts that input and can substitute its own referrer; the guard prevents silent origin changes. A closed/restarted fetch page is recreated; a page moved off its landed origin is re-established under the same exclusive lock.
+
+**Client read budgets.** `ServiceClient.control_timeout` and `control(..., timeout=...)` are optional **whole-operation** budgets in seconds. For finite budgets, the helper discovers the current `queue_timeout_s` and uses `queue + operation budget + 5 s` as its HTTP read timeout. Default `None` stays unbounded, including `UCBrowser` calls: a page evaluate or repeated locator actions has no universal wall-clock bound. In particular, `chat(timeout_s)` bounds only response polling, not setup or the entire control. A read timeout does not cancel server work; do not retry a send blindly.
 
 ## 4. `UCBrowser` in service mode
 
@@ -148,13 +153,15 @@ Selected by environment, so consumers change configuration and not code.
 | `open(url, …)` | `self.new_page()` → attach the caller's tracer if given → `page.goto` → wait, exactly as now |
 | `open_with_intercept(…)` | same page creation; routing and listeners stay local (E5) |
 | the 39 page-taking controls | read the page's target id; `POST …/controls/{name}`; return `result`, except callable orchestration described in §3 |
-| a control on an `engine: none` window | server returns 409 `no_controls`; `UCBrowser` runs the original body on its local page under a scoped recursion guard and remembers the refusal for that attachment. `ServiceClient` instead raises `ControlsUnavailable`. All 39 original outcomes were measured: `docs/08 - Analysis/01 - Engine-Absent Control Behavior.md` |
+| a control on an `engine: none` window | `UCBrowser` reads `offers` from the start response and runs the original body locally when `control` is absent, without a refusal round trip. Unexpected 409 `no_controls` still triggers and remembers the same fallback. Nested controls stay local under a scoped recursion guard. `ServiceClient` instead raises `ControlsUnavailable`. All 39 original outcomes were measured: `docs/08 - Analysis/01 - Engine-Absent Control Behavior.md` |
 | `close()` | `DELETE /clients/{id}`; disconnect. Never `context.close()` |
 | `client_id`, `label` | new read-only attributes |
 
 **Resolving a target id to a `Page`.** After `POST …/pages`, poll the real context's `pages`; for each page not yet known, open a CDP session, send `Target.getTargetInfo`, detach, and cache `target_id → Page`. Stop when the wanted id appears. *Measured:* 0.16–0.17 s (row 6). Allow 10 s, then raise. The reverse lookup for controls uses the same cache.
 
 Pump Playwright events **before** snapshotting `context.pages`; reading that property alone can omit a newly created target. The independent probe measured 20 ms propagation and matched owner/client/Chrome target sets after this correction.
+
+**Context-independence audit.** All 39 original page-taking control bodies were inspected for `self._context`: zero accesses. Retain the Theory doc's grep audit when adding controls; local fallback and the unstarted worker receiver depend on this. Behavioral regressions check real caller-page text and raw Playwright errors rather than pinning source strings.
 
 **Errors.** A dead service surfaces as connection errors on HTTP and "target closed" errors on pages; revocation (E10) surfaces as "target closed" alone. Wrap the first as `UCServiceGone`. Leave the second as the Playwright error it is: the thread it interrupts was abandoned and should unwind.
 
@@ -168,7 +175,7 @@ Pump Playwright events **before** snapshotting `context.pages`; reading that pro
 
 **Per-window setup**, on the owner, once, on the context: the API shim init script; `state_file` cookies; `Stealth().apply_stealth_sync(context)` if configured. *Measured (rows 3, 19):* both reach pages created later through any attachment.
 
-**Control workers.** Each window has independent bounded short and long lanes, each capped by `control_workers`; every worker owns its Playwright/CDP attachment and unstarted local `UCBrowser` receiver. Jobs have a 30-second queue deadline, not a 30-second operation limit. Firefox/WebKit have no CDP and execute jobs on their owner; long work there delays other operations. Those binaries were not installed or live-tested in this build.
+**Control workers.** Each window has independent bounded short and long lanes, each capped by `control_workers`; every worker owns its Playwright/CDP attachment and unstarted local `UCBrowser` receiver. Jobs use the configured `queue_timeout_s` as an admission deadline, not an operation limit. Internal callers may explicitly pass `queue_timeout=None` to disable it. Firefox/WebKit have no CDP and execute jobs on their owner, without lane deadlines; long work there delays other operations. Those binaries were not installed or live-tested in this build.
 
 **Ensuring the engine.** For `extension`: wait for `window.__UC.ready` as `_wait_ready` does. For `inject`: if `window.__UC` is absent, `page.evaluate(<bundle text>)`, then wait for ready. *Measured (row 22):* ready within 1.5 s; the check itself is one `evaluate`. Navigation discards the injected engine, so the check runs on every control call.
 
@@ -192,7 +199,7 @@ Blank/non-http extension pages are not injected or waited on by the preparation 
 4. **Playwright's Chromium started by hand on Ubuntu dies with `No usable sandbox!`** (AppArmor restricts unprivileged user namespaces). Playwright passes `--no-sandbox` itself. Installed Google Chrome starts as a plain subprocess without it. *Measured (launch note, row 20).*
 5. **The extension bundle is gitignored.** Check for `extension/dist/uc-extension.js` at service start; without it refuse `extension` and `inject` windows, since both need the file.
 6. **A headed browser needs the desktop session.** Under systemd the unit needs `DISPLAY` and `XAUTHORITY`.
-7. **Independent Linux solve is verified.** `linux-64` and Node.js 22 are in the UC pixi workspace. The adapter's PyPI stealth extra replaces the redundant conda package, whose solve pinned Playwright 1.60; the project requires Playwright >=1.65.2. Build with `pixi run npm --prefix extension ci` and `pixi run npm --prefix extension run build`.
+7. **Independent Linux solve is verified.** `linux-64` and Node.js 22 are in the UC pixi workspace. The adapter's PyPI stealth extra replaces redundant conda stealth; the initial UC solve selected an incompatible Playwright 1.60 combination. This is not a universal conda-stealth pin: `event_tool` reportedly solves conda Playwright 1.65.2 with stealth 2.0.3; the exact constraint interaction was not investigated. The project requires Playwright >=1.65.2. Shared dependency changes also re-solved **win-64, but Windows was not run**; carry this caveat into PR review. Build with `pixi run npm --prefix extension ci` and `pixi run npm --prefix extension run build`.
 8. **A launching connection that makes no calls does not process events.** This produced the apparent missing page in row 11: a pump before enumeration fixed the exact target sets. Multi-day idle behavior remains unverified.
 9. **Each browser-touching thread costs a Playwright driver.** Measured PSS: 117 MB in the independent baseline and 77 MB in the live-service run. At default caps, up to five drivers per active window (owner + two short + two long), before future site sessions. Size pools deliberately.
 10. **A second Chrome on a held profile can open a tab in the first and exit.** Reject the live profile lock before launch. Installed Chrome rewrites `/proc/<pid>/cmdline` into one process-title string here; missing NUL-separated arguments must not be treated as pid reuse. A narrow live check verified refusal without changing the first window's endpoint file or page count.
@@ -271,7 +278,7 @@ Rollback at any step is unsetting `UC_SERVICE_URL` for that consumer (constraint
 ## Verification
 
 ```bash
-pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_client.py tests/test_service_windows_core.py tests/test_health.py
+pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_client.py tests/test_service_windows_core.py tests/test_service_fetch.py tests/test_health.py
 DISPLAY=:0 XAUTHORITY=/home/rabbit/.Xauthority pixi run python scripts/service_probe.py
 # Against an already-running service configured with DISPOSABLE a/b/native profiles:
 pixi run python scripts/service_probe.py --service-url http://127.0.0.1:4010 \

@@ -432,6 +432,20 @@ def test_control_returns_result_and_posts_args(svc):
     ]
 
 
+@pytest.mark.parametrize("override", [False, True])
+def test_control_read_budget_does_not_expire_during_queue_wait(svc, override):
+    svc.route("GET", "/windows", lambda m, b, q: (200, {"w": {"queue_timeout_s": 0.2}}))
+
+    def delayed_result(m, body, query):
+        threading.Event().wait(0.05)  # exceeds the operation-only read budget
+        return 200, {"result": {"selector": "#search"}}
+
+    svc.route("POST", "/windows/w/pages/T1/controls/detect", delayed_result)
+    client = ServiceClient(svc.url, control_timeout=None if override else 0.001)
+    options = {"timeout": 0.001} if override else {}
+    assert client.control("w", "T1", "detect", ["search"], **options) == {"selector": "#search"}
+
+
 def test_control_409_no_controls_raises_without_a_value(svc):
     svc.route("POST", r"/windows/w/pages/T1/controls/detect_all", lambda m, b, q: (
         409, {"error": "no_controls", "detail": "window w has engine none"},
@@ -859,6 +873,21 @@ def test_409_runs_the_original_body_locally_and_remembers_it(started, caplog):
     assert started.svc.control_names() == ["detect_all"]      # second call skipped the POST
     warned = [r for r in caplog.records if "controls unavailable on window default" in r.getMessage()]
     assert len(warned) == 1 and "detect_all" in warned[0].getMessage()
+
+
+def test_window_without_control_offer_uses_live_page_without_posting(rig):
+    rig.svc.override("POST", "/windows/default/start", lambda m, b, q: (
+        200, {"cdp": "ws://127.0.0.1:1/devtools/browser/x", "offers": ["attach", "fetch"]},
+    ))
+    page = rig.ctx.add_page("T1")
+    page.text = "text from the caller's page, not a service default"
+    with UCBrowser(stealth=False) as uc:
+        assert uc.get_feed_text(page) == page.text
+        assert uc.detect_all(page) == {}
+        assert rig.svc.control_names() == []
+        page.body_error = PlaywrightError("Target page has been closed")
+        with pytest.raises(PlaywrightError, match="has been closed"):
+            uc.get_feed_text(page)
 
 
 def test_409_fallback_is_the_real_body_not_a_default_table(started):

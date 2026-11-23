@@ -12,7 +12,7 @@ cd universal_controller
 pixi install
 ```
 
-The repo is a self-contained pixi workspace (win-64 and linux-64, Python 3.12, Node.js 22); the editable install pulls the `adapter` extras (litellm, mcp, stealth, rookiepy). Playwright is resolved from PyPI at 1.65.2 or newer; do not add conda `playwright-stealth`, which can pin an older conda Playwright. It also works as a git submodule under a parent repo — the two pixi workspaces are independent.
+The repo is a self-contained pixi workspace (win-64 and linux-64, Python 3.12, Node.js 22); the editable install pulls the `adapter` and `service` extras. Playwright is resolved from PyPI at 1.65.2 or newer. Keep stealth in the adapter's PyPI extra rather than duplicating it in conda: the first UC solve selected an incompatible older Playwright combination. This does **not** mean conda stealth universally pins Playwright 1.60; the exact solver interaction is uninvestigated. Shared dependencies re-solved both platforms; **Linux was exercised, Windows was solved but not run**. The repo also works as a git submodule under a parent — the two pixi workspaces are independent.
 
 ## 2. Build the extension
 

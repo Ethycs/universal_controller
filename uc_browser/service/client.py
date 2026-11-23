@@ -156,7 +156,12 @@ class ServiceStream:
 
 class ServiceClient:
     """Stateless HTTP helper. Safe to share between threads (one connection
-    per request)."""
+    per request). ``control_timeout`` is an optional operation budget in
+    seconds, not a total HTTP deadline: controls add the window's queue
+    deadline and a 5-second transport margin. Leave it unset when the
+    operation has no known wall-clock bound (including ordinary UCBrowser
+    calls); a page evaluate or repeated locator actions can exceed a control's
+    polling timeout."""
 
     def __init__(
         self,
@@ -350,14 +355,23 @@ class ServiceClient:
         timeout: Any = ...,
     ) -> Any:
         """Run a ``UCBrowser`` page control on the service; returns ``result``.
-        Raises ``ControlsUnavailable`` on 409 ``no_controls``."""
+        Raises ``ControlsUnavailable`` on 409 ``no_controls``. ``timeout``
+        overrides the operation budget; None keeps the read unbounded.
+        A finite budget must cover the whole operation, not just a polling
+        loop such as chat's ``timeout_s``."""
         body = {"args": list(args), "kwargs": dict(kwargs or {})}
+        read_timeout = self.control_timeout if timeout is ... else timeout
+        if read_timeout is not None:
+            info = self.windows().get(window)
+            if info is None:
+                raise ServiceError("no_such_window", f"no window named {window!r}", 404)
+            read_timeout += info["queue_timeout_s"] + 5.0
         try:
             reply = self.request(
                 "POST",
                 _path("windows", window, "pages", target_id, "controls", name),
                 body,
-                timeout=self.control_timeout if timeout is ... else timeout,
+                timeout=read_timeout,
             )
         except ServiceError as exc:
             if exc.status == 409 and exc.code == "no_controls":

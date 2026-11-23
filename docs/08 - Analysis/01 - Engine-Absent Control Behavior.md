@@ -5,7 +5,7 @@
 **Applies to**: the 39 page-taking `UCBrowser` controls (`docs/02 - Implementation/01 - UC Service — Build Spec.md` §3 rule 1, §4 row "a control on an `engine: none` window"); `has_login_wall` and Design G9
 **Depends on**: `docs/08 - Analysis/00 - Service Prototype Measurements.md` ("row N"), `docs/01 - Design/02 - UC as a Local Service.md` (§2, G9), `docs/00 - Theory/00 - Windows, Transport and Control.md`
 
-**Implementation resolution:** tasks 0–5 now implement the local 409 fallthrough and callable orchestration described below. §4–7 preserve the pre-build findings; the callback/constant-fallback contradictions are resolved in `browser.py`, `client.py` and the Build Spec. The Grok auth findings remain open for task 6. Live service mode verified `detect_all` and body-text fallbacks on an `engine: none` window.
+**Implementation resolution:** tasks 0–5 implement local fallback and callable orchestration. `UCBrowser` now checks the start response's `offers` first: absent `control` means no 409 round trip; an unexpected `no_controls` refusal still falls back. §4–7 preserve pre-build findings; callback/constant-fallback contradictions are resolved in `browser.py`, `client.py` and the Build Spec. Grok auth remains open for task 6. Live service mode verified `detect_all` and body-text fallbacks on an `engine: none` window.
 
 ## Verdict
 

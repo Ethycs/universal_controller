@@ -10,12 +10,19 @@ from urllib.parse import urlsplit
 
 from .errors import ServiceError
 
-FETCH_JS = """async ({url, method, headers, body, callback, token}) => {
+FETCH_JS = """async ({url, method, headers, body, referrer, callback, token}) => {
   const abort = new AbortController();
   window.__ucServiceFetches ??= {};
   window.__ucServiceFetches[token] = abort;
   try {
     const init = {method, headers, credentials: 'include', signal: abort.signal};
+    if (referrer) {
+      // Chromium can substitute the document referrer across a redirect.
+      // Keep an explicit caller origin from silently changing identity.
+      if (new URL(referrer).origin !== location.origin)
+        throw new Error('fetch referrer origin differs from the retained page');
+      init.referrer = referrer;
+    }
     if (body !== null && body !== undefined)
       init.body = typeof body === 'string' ? body : JSON.stringify(body);
     const response = await window.fetch(url, init);
@@ -50,6 +57,14 @@ def origin(url: str) -> str:
     except ValueError as exc:
         raise ServiceError("origin_unreachable", "invalid URL port", 502) from exc
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _page_origin(url: str) -> str | None:
+    """Origin of a live page URL, or None for about:blank and other non-HTTP pages."""
+    try:
+        return origin(url)
+    except ServiceError:
+        return None
 
 
 @dataclass
@@ -142,11 +157,21 @@ class Operations:
 
     def _fetch_job(self, name, request, *, emit=None, cancelled=None):
         url = request["url"]
-        from_url = request.get("from") or origin(url) + "/"
         origin(url)
+        explicit_from = request.get("from")
+        # One page per (window, origin of the referring URL). Without an
+        # explicit "from" the fetch URL's own origin root is used.
+        from_url = explicit_from or origin(url) + "/"
         entry = self._fetch_page(name, from_url)
         window = self.manager.get(name)
         token = uuid.uuid4().hex
+        # Stream and buffered fetches share every request option; only the
+        # streaming callback differs.
+        options = {
+            "url": url, "method": request.get("method", "GET"),
+            "headers": request.get("headers", {}), "body": request.get("body"),
+            "token": token,
+        }
 
         def job(rt):
             with entry.lock:
@@ -156,9 +181,19 @@ class Operations:
                 callback = None
                 holder = None
                 try:
-                    if entry.url != from_url or page.url != from_url:
+                    # Navigate only to establish the origin (first use, a fresh
+                    # page after a generation change or closed tab, or a page
+                    # something else moved off the origin). Later same-origin
+                    # "from" values are sent as the Fetch referrer instead, so
+                    # navigation never aborts or races a fetch on this page.
+                    landed = _page_origin(entry.url) if entry.url else None
+                    if landed is None or _page_origin(page.url) != landed:
                         page.goto(from_url, wait_until="domcontentloaded", timeout=30000)
                         entry.url = page.url
+                    # Preserve the requested referrer. If navigation redirected
+                    # across origins, Fetch must reject it rather than silently
+                    # substituting the redirected document's identity.
+                    referrer = explicit_from
                     if emit:
                         bindings = getattr(rt, "_fetch_bindings", None)
                         if bindings is None:
@@ -175,11 +210,7 @@ class Operations:
                         else:
                             callback, holder = binding
                         holder["emit"] = emit
-                    return page.evaluate(FETCH_JS, {
-                        "url": url, "method": request.get("method", "GET"),
-                        "headers": request.get("headers", {}), "body": request.get("body"),
-                        "callback": callback, "token": token,
-                    })
+                    return page.evaluate(FETCH_JS, {**options, "referrer": referrer, "callback": callback})
                 except ServiceError:
                     raise
                 except Exception as exc:

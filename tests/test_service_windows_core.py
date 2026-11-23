@@ -77,6 +77,13 @@ def test_repeated_and_nested_resolved_profiles_rejected(tmp_path):
     {"stealth": 1},
     {"browser": "firefox", "engine": "inject", "stealth": True},
     {"bogus": 1},
+    {"queue_timeout_s": 0},
+    {"queue_timeout_s": -1},
+    {"queue_timeout_s": True},
+    {"queue_timeout_s": "5"},
+    {"queue_timeout_s": None},
+    {"queue_timeout_s": float("nan")},
+    {"queue_timeout_s": float("inf")},
 ])
 def test_bad_window_config_rejected(tmp_path, raw):
     with pytest.raises(ConfigError):
@@ -519,6 +526,41 @@ def test_non_cdp_work_runs_on_owner(tmp_path):
     owner_tid = w.owner(lambda rt: threading.get_ident()).result(5)
     assert w.work(lambda rt: threading.get_ident(), long=True).result(5) == owner_tid
     w.close()
+
+
+def test_work_uses_configured_queue_timeout_and_keeps_explicit_values(tmp_path):
+    launch = FakeLaunch()
+    launch.make_worker_runtime = FakeWorkerRuntime
+    mgr = WindowManager(write_config(tmp_path, {"w": {
+        "profile": str(tmp_path / "p"), "browser": "chromium", "engine": "inject",
+        "control_workers": 1, "queue_timeout_s": 0.3,
+    }}))
+    w = mgr.get("w")
+    lanes = windows._Lanes(launch, w.spec)
+    w._lanes = lambda: lanes
+    gate, entered = threading.Event(), threading.Event()
+
+    def block(rt):
+        entered.set()
+        return gate.wait(10)
+
+    try:
+        running = w.work(block, queue_timeout=None)
+        assert entered.wait(5)
+        waiting = w.work(lambda rt: "late")  # omitted: the configured 0.3s deadline
+        with pytest.raises(ServiceError) as err:
+            waiting.result(3)
+        assert (err.value.code, err.value.status) == ("busy", 503)
+        # explicit None disables the deadline: still queued well past 0.3s
+        patient = w.work(lambda rt: "patient", queue_timeout=None)
+        with pytest.raises(cf.TimeoutError):
+            patient.result(0.6)
+        gate.set()
+        assert running.result(5) is True
+        assert patient.result(5) == "patient"
+    finally:
+        gate.set()
+        lanes.close(5)
 
 
 def test_manager_start_eager_reports_failures_without_raising(tmp_path):

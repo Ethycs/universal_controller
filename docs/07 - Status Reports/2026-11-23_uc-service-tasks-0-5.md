@@ -54,10 +54,23 @@ The full suite was not rerun after the targeted repair or service implementation
 
 Unverified: Firefox/WebKit live execution, Windows runtime profile guards, multi-day idle operation, injected engine against real bot checks, mixed client/service Playwright versions, and live Grok account concurrency. Keep concurrent sends at one when task 6 is built.
 
+## 5. Authorized wire-v0 follow-up
+
+After the initial tasks 0–5 delivery, the owner authorized review, implementation, verification and push of PBX 210-1001's contract refinements. The following supersedes the fixed queue deadline and 409-first behavior recorded above:
+
+- Windows accept positive finite `queue_timeout_s` (default 30) and expose it in discovery. A real occupied worker regression verifies configured expiry as `busy`; explicit internal `None` preserves an unbounded queue wait.
+- Finite `ServiceClient` control timeouts are whole-operation budgets plus the discovered queue deadline and 5 seconds. Default reads remain unbounded because the controls have no universal wall-clock bound; `chat(timeout_s)` is only its response-polling bound.
+- Fetch already used `credentials: 'include'`. A retained page now loads once (`domcontentloaded`), at explicit `from` or the origin root; later same-origin `from` becomes a Fetch referrer with no navigation. Existing per-page serialization remains. Chromium accepted a cross-origin redirected document's explicit referrer rather than raising; an explicit origin guard now fails that request as `origin_unreachable` before sending it.
+- Snapshot rule 7 now says **of an existing target**. HTTP-only registration/page creation remains available without a browser library.
+- `UCBrowser` uses the start response's `offers` to select faithful local engine-none behavior before any control POST; unexpected 409 responses still fall back. The source audit found zero `self._context` accesses in all 39 original page-taking bodies; behavioral tests cover caller-page text and errors.
+- Corrected the solver diagnosis: the initial UC solve selected an incompatible combination; conda stealth does not universally pin Playwright 1.60. **Both platforms were re-solved; Windows was not run.** Carry that caveat into PR review.
+
+Verification: the focused client/core/fetch run produced **102 passed, 1 failed** (the redirect assumption). After adding the explicit origin guard, the affected real-Chromium fetch file produced **3 passed**. These checks include cross-origin cookie inclusion, exact same-origin referrers, no later navigation, and an uninterrupted stream while another request waits on its page. The other 100 client/core tests passed in the first run; they were not repeated after the fetch-only fix. No live accounts, profiles or deployment were used.
+
 ## Verification
 
 ```bash
-pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_client.py tests/test_service_windows_core.py tests/test_health.py
+pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_client.py tests/test_service_windows_core.py tests/test_service_fetch.py tests/test_health.py
 DISPLAY=:0 XAUTHORITY=/home/rabbit/.Xauthority pixi run python scripts/service_probe.py
 ```
 
