@@ -6,6 +6,7 @@ tests/test_grok.py
 tests/test_health.py
 tests/test_lab.py
 tests/test_reverse_loop.py
+tests/test_service_api.py
 tests/test_timing.py
 tests/test_uc_provider.py
 tests/test_vendor_signatures.py
@@ -29,6 +30,13 @@ uc_browser/llm_providers/uc.py
 uc_browser/mcp/__init__.py
 uc_browser/mcp/grok_tools.py
 uc_browser/mcp/site_tools.py
+uc_browser/service/__init__.py
+uc_browser/service/api.py
+uc_browser/service/client.py
+uc_browser/service/errors.py
+uc_browser/service/leases.py
+uc_browser/service/operations.py
+uc_browser/service/targets.py
 uc_browser/sites/__init__.py
 uc_browser/sites/generic.py
 uc_browser/sites/grok.py

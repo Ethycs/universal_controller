@@ -12,6 +12,11 @@ Requires-Dist: playwright>=1.65.2
 Requires-Dist: numpy>=1.24
 Requires-Dist: scikit-learn>=1.3
 Requires-Dist: joblib>=1.3
+Provides-Extra: service
+Requires-Dist: fastapi>=0.115; extra == "service"
+Requires-Dist: uvicorn>=0.30; extra == "service"
+Requires-Dist: psutil>=5.9; extra == "service"
+Requires-Dist: playwright-stealth<3,>=2.0.2; extra == "service"
 Provides-Extra: training
 Requires-Dist: scikit-learn>=1.3; extra == "training"
 Requires-Dist: joblib>=1.3; extra == "training"

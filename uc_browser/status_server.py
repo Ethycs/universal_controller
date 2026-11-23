@@ -161,13 +161,23 @@ def _build_mcp(monitor: HealthMonitor):
 def create_app(registry: Optional[SiteRegistry] = None,
                monitor: Optional[HealthMonitor] = None,
                run_scheduler: bool = True,
-               with_mcp: bool = True):
+               with_mcp: bool = True,
+               window_manager=None):
     from fastapi import FastAPI, HTTPException
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.exceptions import RequestValidationError
+    from uc_browser.service.api import create_router
+    from uc_browser.service.errors import ServiceError
+    from uc_browser.service.leases import LeaseStore
+    from uc_browser.service.operations import Operations
+    from uc_browser.service.windows import WindowManager
 
     registry = registry or get_registry()
     monitor = monitor or HealthMonitor()
     mcp = _build_mcp(monitor) if with_mcp else None
+    windows = window_manager if window_manager is not None else WindowManager()
+    leases = LeaseStore(windows)
+    operations = Operations(windows, leases)
 
     async def _scheduler():
         while True:
@@ -184,8 +194,16 @@ def create_app(registry: Optional[SiteRegistry] = None,
 
     @asynccontextmanager
     async def _lifespan(app):
-        task = asyncio.create_task(_scheduler()) if run_scheduler else None
+        task = None
         try:
+            missing = await asyncio.to_thread(windows.missing_engine_files)
+            if missing:
+                raise ServiceError("launch_failed", f"engine bundle missing for windows: {', '.join(missing)}")
+            failures = await asyncio.to_thread(windows.start_eager)
+            if failures:
+                raise next(iter(failures.values()))
+            leases.start()
+            task = asyncio.create_task(_scheduler()) if run_scheduler else None
             if mcp is not None:
                 # The streamable-http transport needs its session manager
                 # task group running for the mounted app to serve requests.
@@ -196,11 +214,30 @@ def create_app(registry: Optional[SiteRegistry] = None,
         finally:
             if task:
                 task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            await asyncio.to_thread(leases.close)
+            await asyncio.to_thread(windows.close)
 
     app = FastAPI(title="UC Site Status", docs_url=None, redoc_url=None,
                   lifespan=_lifespan)
     app.state.registry = registry
     app.state.monitor = monitor
+    app.state.windows = windows
+    app.state.leases = leases
+    app.state.operations = operations
+
+    @app.exception_handler(ServiceError)
+    async def service_error(request, exc):
+        return JSONResponse(exc.as_dict(), status_code=exc.status)
+
+    @app.exception_handler(RequestValidationError)
+    async def bad_request(request, exc):
+        return JSONResponse({"error": "bad_arguments", "detail": "request does not match the route schema"}, status_code=400)
+
+    app.include_router(create_router(windows, leases, operations))
 
     @app.get("/", response_class=HTMLResponse)
     async def index():

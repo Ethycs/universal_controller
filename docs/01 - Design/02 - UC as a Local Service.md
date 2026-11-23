@@ -1,6 +1,6 @@
 # UC as a Local Service — one owner for every browser identity; every access technique offered on it, none required
 
-**Status**: DRAFT (design; nothing here is implemented)
+**Status**: DRAFT for the full migration; handoff tasks 0–5 are implemented and verified in the independent checkout. Sessions, adapter/provider/MCP migration, consumer moves and systemd deployment are not implemented; the lifecycle tables remain the migration requirements
 **Date**: 2026-11-23
 **Applies to**: `uc_browser/browser.py`, `uc_browser/status_server.py`, `uc_browser/sites/`, `uc_browser/health.py`, `uc_browser/llm_providers/uc.py`, `uc_browser/mcp/`; consumers, chiefly `event_tool`
 **Depends on**: `docs/00 - Theory/00 - Windows, Transport and Control.md` (the model), `docs/08 - Analysis/00 - Service Prototype Measurements.md` (the evidence; "row N" refers to its §3), `docs/03 - Architecture/00 - System Overview.md` (what exists)
@@ -148,7 +148,7 @@ Each row is something a consumer does over time, what happens today, and the pat
 | E11 | Explore sessions: up to three, each holding a `UCBrowser` across MCP calls, reaped by `event_tool` after 15 idle minutes; optionally native | each owns a browser; a native session and a harvest contend for port 9222 and one profile | each is a client holding one page; `event_tool`'s own reaper calls `close()` as now. Native sessions and the harvest share `native` as tabs |
 | E12 | CLI `web replay` / `web test` from a second process while the service process may be harvesting | a second launch on the harvest's profile | a second client of `harvest`. Its lease is that CLI process |
 | E13 | `web login`: a separate Chrome whose only product is a state file the next harvest reads | fourth profile; sign-in happens in a browser nothing else uses | sign-in happens to the window (§8); the command becomes "open a tab in `harvest` and wait" |
-| E14 | The service process restarts (deploy) | its browsers die with it | nothing happens to the windows; the old process's clients are reaped by pid (§5) |
+| E14 | The consumer service process (`event-harvester-mcp`) restarts (deploy) | its browsers die with it | nothing happens to UC's windows; the old consumer's clients are reaped by pid (§5). Restarting UC itself instead closes its windows (§11) |
 
 ### 3.2 uc-grok
 
@@ -298,7 +298,7 @@ The pin belongs to UC: the service's Playwright version determines the Chromium 
 
 ## 11. Failure modes to design for
 
-1. **The service restarts.** Its browsers go with it, so every client's pages die mid-use. Sign-ins survive in the profiles and sessions are rebuilt from the map (G3). The client library must turn the resulting Playwright errors into one clear "service gone" error.
+1. **UC itself restarts.** Its browsers go with it, so every client's pages die mid-use. Sign-ins survive in profiles; future sessions will rebuild from the map (G3). HTTP connection failures surface as `UCServiceGone`; raw page operations retain Playwright's target-closed errors.
 2. **A window's browser crashes.** The service relaunches that window; other windows are untouched; that window's leases and sessions are void.
 3. **A consumer bypasses the service** and launches on a served profile (constraint 4). The client library must make the service path the default whenever a service is configured, and the launch path must refuse a profile the service lists.
 4. **A browser the service did not launch already holds a profile**, as the four-day-old Chrome did (Analysis §5). The service must detect a held profile at launch and refuse loudly, not attach to whatever answers.
@@ -331,11 +331,11 @@ Steps 4–6 each move one consumer and can stop there if a later step slips.
 
 ## Verification
 
-Nothing here is built, so there is nothing to run against the design yet. Two checks that it still describes reality:
+Tasks 0–5 were verified with fresh profiles: 115 integrated service/client/window/health tests, three additional startup/profile regressions, all baseline probe rows and the real-service model assertions. Revocation interrupted a 600-second page wait in 0.04 seconds.
 
 ```bash
-grep -rn 'UCBrowser(' uc_browser --include='*.py'          # browser owners inside UC
-grep -rn -E 'uc\._context|uc\._stealth_plugin' ../../src --include='*.py'   # from event_tool's checkout: consumers reaching past the controller
+pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_client.py tests/test_service_windows_core.py tests/test_health.py
+pixi run python scripts/service_probe.py
 ```
 
-Before the build, the first lists the runtime owners named in §0; after step 8 it should list only the service's window manager and the client library. The second lists the call sites behind E4; a new kind of reach-through there is a lifecycle §3 does not have yet, and constraint 5 applies.
+See the Build Spec §8 for live-service invocation and explicit limits. G1–G15 remain migration pathways, not claims that site sessions are deployed. No consumer, live profile or systemd unit was changed in tasks 0–5.

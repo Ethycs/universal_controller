@@ -1,6 +1,6 @@
 # What a controlled browser shares is an identity held by one process. The ways of reaching a site through it are many and are composed per pathway; none of them is the browser's one interface. Its unit of isolation is the browser process, not the tab and not the client.
 
-**Status**: DRAFT (theory; the service it argues for is not implemented)
+**Status**: DRAFT (theory; window/control/lease/HTTP service substrate implemented and verified on 2026-11-23, site-session and consumer migration still pending)
 **Date**: 2026-11-23
 **Applies to**: `uc_browser/browser.py` (`UCBrowser`), every runtime browser owner in `uc_browser/` (`sites/grok.py`, `sites/generic.py`, `health.py`), and consumers such as `event_tool`
 **Depends on**: `docs/03 - Architecture/00 - System Overview.md` (design axiom 4), `docs/08 - Analysis/00 - Service Prototype Measurements.md` (every claim marked *measured*; row numbers refer to its §3)
@@ -179,7 +179,7 @@ Three classes, three windows. The harvest's parallel workers are one class and s
 | Two clients in one window will interfere through context-level hooks | *already observed* — this is the model, not a risk to it |
 | Nothing a client does in one window is visible in another | a cookie, script or page crosses windows |
 | A long control delays nothing on other attachments (*measured* with a polling loop, row 15) | a real `chat` against a model slows short controls on the same window by more than its own page load |
-| Closing a page from outside unwinds a client stuck on it | the stuck call does not fail (`unverified`) |
+| Closing a page from outside unwinds a client stuck on it (*measured:* label revocation interrupted `wait_for_timeout(600000)` in 0.04 s) | the stuck call does not fail |
 
 The fifth row is the one the isolation argument rests on, and the sixth the one the concurrency argument rests on. If either fails, the corresponding section must be re-derived.
 

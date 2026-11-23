@@ -14,7 +14,7 @@
 5. Installed Google Chrome serves CDP on a browser-chosen port, and the engine bundle runs in it when injected over CDP: `detect_all` and `set_text` worked.
 6. In the field, a browser whose owner was abandoned stayed up for days and later runs silently attached to it (§5).
 
-All three probes were throwaway scripts and are **not in the repo**. Landing them as `scripts/service_probe.py` is step 1 of the build (`docs/01 - Design/02 - UC as a Local Service.md` §12); until then these numbers can only be reproduced by rebuilding the probes from §2.
+The original three probes were throwaway scripts. `scripts/service_probe.py` now rebuilds B and C with local HTTP fixtures and temporary profiles; all 24 rows passed on the main-derived independent checkout on 2026-11-23 (§7). The original numbers below remain historical measurements.
 
 ## 1. Conditions
 
@@ -128,14 +128,35 @@ Nothing in the current design can close that browser: the thread that owned it c
 2. **A real long control.** Row 14 is a loop shaped like `_wait_chat_response`, not `chat` against a model.
 3. **Load.** At most three attachments at once. No parallel harvest.
 4. **A signed-in, long-lived profile.** All windows used fresh temporary profiles.
-5. **`main`.** `5e3dd0a` adds the toolkit path and a newer extension; every probe ran on `99390a5`.
+5. **Original code revision.** The original rows used `99390a5`; §7 now repeats the model on main-derived `9c3d6ab`.
 6. **Different Playwright versions on the two sides.** Service and clients shared one environment.
 7. **An idle launching connection over days.** Whether events queue up behind a launching thread that makes no Playwright calls was reasoned about, not measured (Build Spec §6, gotcha 8).
 8. **Variance.** Treat every figure as an order of magnitude.
 
+## 7. Independent checkout run — 2026-11-23
+
+Runtime: main-derived `9c3d6ab`, Python 3.12.16, Playwright 1.65.2, stealth 2.0.3, Chromium 159.0.8154.6, installed Chrome 157.0.8103.78. Local fixture server; fresh temporary profiles; no account data.
+
+| Rows | Measured |
+|---|---|
+| 1–3 | Both Chromium windows publish CDP; attachments 13–44 ms; owner init script visible to clients |
+| 4–5 | First control including cold worker startup 431 ms; warmed controls 8–46 ms |
+| 6–7 | Page appeared on client after 20 ms polling; all six raw page operations succeeded |
+| 8–10 | Context script shared within window, exact four-page client sets match; cookies/scripts absent across windows |
+| 11 | No targets disappeared on disconnect. Initial owner list missed one pending page-created event; pumping Playwright before snapshotting `context.pages` fixed it. Narrow B rerun matched every owner/client/Chrome target id (4 pages in a, 2 in b) |
+| 12 | 275 MB PSS / 4 pages / 13 processes; 218 MB / 2 pages / 11 processes |
+| 13 | All 56 tracked browser/driver processes exited; shutdown 0.79 s |
+| 14–18 | Long loop 6.11 s / 24 polls; concurrent evaluates median 2 ms, max 5 ms; second attachment finished 5.00 s earlier and its write reached the busy page |
+| 19 | Client-created page webdriver: True before context stealth, False after |
+| 20–23 | Chrome port 0 works; engine absent before injection, ready after 0.05 s; detect/set_text work; context init injection reaches new pages |
+| 24 | One Playwright driver, 117 MB PSS |
+| Supplement S1 | Native control route injects on first call; eight-key pattern map, 583 ms including cold worker startup |
+
+All isolation/concurrency model assertions passed. Row 11 was stale event enumeration, not page destruction: every owner listing must pump events before taking its page snapshot. Only that probe section was repeated after the correction; the full probe was not rerun.
+
 ## Verification
 
-Not reproducible from the repo today (see Verdict). Once `scripts/service_probe.py` exists:
+Run the retained baseline probe (opens disposable headed windows on the desktop):
 
 ```bash
 pixi run python scripts/service_probe.py

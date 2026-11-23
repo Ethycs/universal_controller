@@ -31,10 +31,14 @@ Usage::
         patterns = uc.auto_detect(page)       # infer what pattern it was
 """
 
+import contextlib
+import functools
+import inspect
 import logging
 import os
 import shutil
 import sys
+import threading
 import time
 import warnings
 from enum import Enum
@@ -422,6 +426,7 @@ class UCBrowser:
         headless: Optional[bool] = None,
         use_extension: Optional[bool] = None,
         native_chrome: Optional[bool] = None,
+        label: Optional[str] = None,
     ):
         # Resolve mode from explicit param or legacy flags
         if mode is None:
@@ -443,6 +448,15 @@ class UCBrowser:
         self._browser = None
         self._stealth_plugin = None
         self._chrome_proc = None
+        # Service mode (UC_SERVICE_URL): every one of these stays unset until
+        # start() has actually attached, so an unstarted UCBrowser -- including
+        # the receiver the service itself runs controls on -- is always local.
+        self._label = label if label is not None else (os.environ.get("UC_CLIENT_LABEL") or None)
+        self._client_id = None
+        self._service = None
+        self._service_window = None
+        self._targets = None
+        self._no_controls: set = set()
 
     @staticmethod
     def _infer_mode_from_legacy_flags(
@@ -477,6 +491,16 @@ class UCBrowser:
     def native_chrome(self) -> bool:
         return self.mode == BrowserMode.NATIVE_CDP
 
+    @property
+    def label(self) -> Optional[str]:
+        """Label this client registers with the service (read-only)."""
+        return self._label
+
+    @property
+    def client_id(self) -> Optional[str]:
+        """Service client id, set while attached in service mode (read-only)."""
+        return self._client_id
+
     def __enter__(self):
         self.start()
         return self
@@ -485,7 +509,15 @@ class UCBrowser:
         self.close()
 
     def start(self) -> None:
-        """Launch the browser according to self.mode."""
+        """Launch the browser according to self.mode, or -- when
+        ``UC_SERVICE_URL`` is set -- attach to a window of the UC service
+        (register a client, start the window, connect over CDP; nothing is
+        launched and no init script is installed)."""
+        service_url = os.environ.get("UC_SERVICE_URL", "").strip()
+        if service_url:
+            self._start_service(service_url)
+            return
+
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
@@ -497,9 +529,13 @@ class UCBrowser:
             BrowserMode.CHROME: self._start_chrome,
         }
         try:
-            starters[self.mode]()
-        except KeyError:
-            raise ValueError(f"Unknown BrowserMode: {self.mode}")
+            try:
+                starters[self.mode]()
+            except KeyError:
+                raise ValueError(f"Unknown BrowserMode: {self.mode}")
+        except BaseException:
+            self.close()
+            raise
 
         if self.use_stealth and self.mode != BrowserMode.NATIVE_CDP:
             self._init_stealth()
@@ -542,6 +578,9 @@ class UCBrowser:
             logger.warning("UC extension not found at %s", _EXT_DIR)
         profile_dir = str((_CHROME_PROFILE.parent / ".uc_chromium_profile").resolve())
         Path(profile_dir).mkdir(parents=True, exist_ok=True)
+        from uc_browser.service.profiles import assert_profile_available
+
+        assert_profile_available(Path(profile_dir))
         self._context = self._pw.chromium.launch_persistent_context(
             profile_dir,
             headless=False,
@@ -566,6 +605,9 @@ class UCBrowser:
     def _start_chrome(self) -> None:
         """Installed Chrome + logged-in persistent profile."""
         _CHROME_PROFILE.parent.mkdir(parents=True, exist_ok=True)
+        from uc_browser.service.profiles import assert_profile_available
+
+        assert_profile_available(_CHROME_PROFILE)
         self._context = self._pw.chromium.launch_persistent_context(
             str(_CHROME_PROFILE),
             headless=False,
@@ -584,34 +626,14 @@ class UCBrowser:
     def _start_native_chrome(self) -> None:
         """Launch actual Chrome via subprocess, connect Playwright via CDP.
 
-        No automation flags, real user profile, real extensions — Chrome
-        runs exactly as the user would launch it, plus a debug port.
+        No automation flags, real extensions -- Chrome runs as the user would
+        launch it, plus a debug port. The shared launcher picks a fresh
+        loopback port (never 9222), refuses a profile another browser holds,
+        and attaches only to the process it started; it raises
+        ``ServiceError`` (``profile_held`` / ``launch_failed``) otherwise.
         """
-        import subprocess
-        import time as _time
+        from uc_browser.service.profiles import launch_native
 
-        chrome_path = shutil.which("chrome") or shutil.which("google-chrome")
-        if not chrome_path:
-            # Windows default paths
-            for candidate in [
-                Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-                Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-                Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe",
-            ]:
-                if candidate.exists():
-                    chrome_path = str(candidate)
-                    break
-
-        if not chrome_path:
-            logger.error("Chrome not found. Falling back to Playwright channel='chrome'.")
-            _CHROME_PROFILE.parent.mkdir(parents=True, exist_ok=True)
-            self._context = self._pw.chromium.launch_persistent_context(
-                str(_CHROME_PROFILE), headless=False, channel="chrome",
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-            return
-
-        port = 9222
         # Chrome requires a non-default --user-data-dir for remote
         # debugging. We use a fresh, otherwise-empty profile and only
         # load the KeePassXC-Browser extension (if it's installed in
@@ -620,20 +642,12 @@ class UCBrowser:
         # copy avoids the "Failed to load extension from <data/...>"
         # noise that came from Chrome trying to re-resolve every other
         # extension referenced in the copied Preferences.
-        profile_dir = str(_NATIVE_PROFILE)
-        Path(profile_dir).mkdir(parents=True, exist_ok=True)
+        _NATIVE_PROFILE.mkdir(parents=True, exist_ok=True)
 
-        cmd = [
-            chrome_path,
-            f"--remote-debugging-port={port}",
-            f"--user-data-dir={profile_dir}",
-            "--no-first-run",
-            "--no-default-browser-check",
-        ]
-
+        extra_args: list[str] = []
         keepass_path = _ensure_keepassxc_extension()
         if keepass_path is not None:
-            cmd.extend([
+            extra_args.extend([
                 f"--load-extension={keepass_path}",
                 f"--disable-extensions-except={keepass_path}",
             ])
@@ -644,34 +658,90 @@ class UCBrowser:
                 "launching without autofill support.",
             )
 
-        logger.info("Launching native Chrome: %s", " ".join(cmd[:2]))
-        self._chrome_proc = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        logger.info("Launching native Chrome on profile %s", _NATIVE_PROFILE)
+        proc, browser, context, cdp = launch_native(
+            self._pw, _NATIVE_PROFILE, extra_args=tuple(extra_args),
         )
+        self._chrome_proc = proc
+        self._browser = browser
+        self._context = context
+        logger.info("Connected to native Chrome via CDP (%s).", cdp)
 
-        # Wait for CDP to be ready (retry until Chrome's debug port comes up)
-        last_err = None
-        for _ in range(15):
-            _time.sleep(1)
-            try:
-                self._browser = self._pw.chromium.connect_over_cdp(
-                    f"http://localhost:{port}",
+    # ── Service mode ────────────────────────────────────────────────────
+
+    def _service_window_name(self) -> str:
+        if self.mode == BrowserMode.NATIVE_CDP:
+            return os.environ.get("UC_NATIVE_WINDOW", "").strip() or "native"
+        return os.environ.get("UC_WINDOW", "").strip() or "default"
+
+    def _start_service(self, url: str) -> None:
+        """Register, start the window, attach over CDP. Any failure undoes
+        what already happened (the registration, the connection) and raises."""
+        from playwright.sync_api import sync_playwright
+
+        from uc_browser.service.client import ServiceClient
+        from uc_browser.service.targets import TargetResolver
+
+        client = ServiceClient(url)
+        window = self._service_window_name()
+        client_id = pw = browser = None
+        try:
+            client_id = client.register_client(window, self._label)
+            info = client.start_window(window)
+            cdp = info.get("cdp")
+            if not cdp:
+                raise RuntimeError(
+                    f"UC service window {window!r} serves no CDP endpoint "
+                    f"(offers: {info.get('offers')}); UCBrowser cannot attach to it",
                 )
-                break
-            except Exception as e:
-                last_err = e
-                continue
-        else:
-            if last_err:
-                logger.debug("CDP connect retries exhausted, last error: %s", last_err)
-            logger.error("Failed to connect to native Chrome on port %d", port)
-            self._chrome_proc.kill()
-            self._chrome_proc = None
-            return
+            pw = sync_playwright().start()
+            browser = pw.chromium.connect_over_cdp(cdp)
+            if not browser.contexts:
+                raise RuntimeError(f"UC service window {window!r} exposed no browser context")
+            context = browser.contexts[0]
+        except BaseException:
+            self._release_service(client, client_id, browser, pw)
+            raise
 
-        contexts = self._browser.contexts
-        self._context = contexts[0] if contexts else self._browser.new_context()
-        logger.info("Connected to native Chrome via CDP (port %d).", port)
+        self._pw = pw
+        self._browser = browser
+        self._context = context
+        self._stealth_plugin = None  # the window's context is already stealthed
+        self._client_id = client_id
+        self._service_window = window
+        self._targets = TargetResolver(context)
+        self._no_controls = set()
+        self._service = client  # last: from here on controls dispatch remotely
+        logger.info("Attached to UC service %s window %r as client %s.", url, window, client_id)
+
+    @staticmethod
+    def _release_service(client, client_id, browser, pw) -> None:
+        """Best-effort teardown: release the client (closing its leased
+        pages), then disconnect. ``browser.close()`` on a CDP attachment only
+        detaches; the context is never closed."""
+        if client_id is not None:
+            try:
+                client.close_client(client_id)
+            except Exception as e:
+                logger.debug("DELETE client %s failed during teardown: %s", client_id, e)
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception as e:
+                logger.debug("browser disconnect failed during teardown: %s", e)
+        if pw is not None:
+            try:
+                pw.stop()
+            except Exception as e:
+                logger.debug("playwright.stop() failed during teardown: %s", e)
+
+    def _close_service(self) -> None:
+        client, client_id = self._service, self._client_id
+        browser, pw = self._browser, self._pw
+        self._service = self._client_id = self._service_window = self._targets = None
+        self._context = self._browser = self._pw = None
+        self._no_controls = set()
+        self._release_service(client, client_id, browser, pw)
 
     def is_alive(self) -> bool:
         """True if the browser context is still usable.
@@ -696,6 +766,9 @@ class UCBrowser:
 
     def close(self) -> None:
         """Shut down browser and Playwright."""
+        if self._service is not None:
+            self._close_service()
+            return
         if self._context:
             try:
                 self._context.close()
@@ -723,6 +796,30 @@ class UCBrowser:
 
     # ── Page management ─────────────────────────────────────────────────
 
+    def new_page(self) -> "Page":
+        """Open a blank tab and return its Playwright Page.
+
+        In-process: created on the local context with the stealth plugin
+        applied. Service mode: the service creates it (leased to this client)
+        and the target id is resolved to a local Page on this connection.
+        """
+        client = self._service
+        if client is None:
+            page = self._context.new_page()
+            if self._stealth_plugin:
+                self._stealth_plugin.apply_stealth_sync(page)
+            return page
+        window = self._service_window
+        target_id = client.new_page(window, client_id=self._client_id)
+        try:
+            return self._targets.resolve(target_id)
+        except BaseException:
+            try:
+                client.close_page(window, target_id)
+            except Exception as e:
+                logger.debug("closing unresolved page %s failed: %s", target_id, e)
+            raise
+
     def open(
         self,
         url: str,
@@ -740,9 +837,7 @@ class UCBrowser:
         own source_name internally. When ``capture`` is also provided,
         per-step PNG screenshots are written alongside each JSONL row.
         """
-        page = self._context.new_page()
-        if self._stealth_plugin:
-            self._stealth_plugin.apply_stealth_sync(page)
+        page = self.new_page()
         if tracer is not None and _nav_trace_attach is not None:
             _nav_trace_attach(tracer, page, capture=capture)
             # Initial "open" record happens BEFORE goto — no DOM yet to
@@ -787,9 +882,7 @@ class UCBrowser:
         """
         import re as _re
 
-        page = self._context.new_page()
-        if self._stealth_plugin:
-            self._stealth_plugin.apply_stealth_sync(page)
+        page = self.new_page()
 
         if tracer is not None and _nav_trace_attach is not None:
             _nav_trace_attach(tracer, page, capture=capture)
@@ -1794,3 +1887,91 @@ class UCBrowser:
         self.close_modal(page)
         items = self.scroll_feed(page, seconds=scroll_seconds)
         return page, items
+
+
+# ── Service-mode control dispatch ───────────────────────────────────────
+#
+# The page-taking controls (public methods whose first parameter after
+# ``self`` is ``page``) are wrapped once, here, so each body stays exactly as
+# it is. Wrapping uses ``functools.wraps``: ``inspect.signature`` still sees
+# the original signature and ``__wrapped__`` is the original body (which the
+# service allowlist and its workers rely on).
+#
+# A wrapped control dispatches over HTTP only when this UCBrowser has actually
+# attached to a service (``self._service`` is set at the end of ``start()``).
+# Any other receiver -- unstarted, in-process, or the pristine receiver the
+# service itself runs controls on -- runs the body locally, whatever the
+# environment says.
+
+# Controls that take a callable cannot cross HTTP: their body runs in the
+# caller and the controls it calls dispatch as usual. ``scan_action`` always
+# (its callable is required); ``scroll_feed`` whenever ``on_item`` is given.
+_CALLBACK_CONTROLS = {"scan_action": "action", "scroll_feed": "on_item"}
+
+# Per-thread set of UCBrowsers currently running a control body locally
+# because the window has no engine (409 ``no_controls``). Their nested
+# controls must run in-process too, not POST and 409 again.
+_local_control_scope = threading.local()
+
+
+@contextlib.contextmanager
+def _local_control(uc):
+    active = _local_control_scope.__dict__.setdefault("active", {})
+    key = id(uc)
+    active[key] = active.get(key, 0) + 1
+    try:
+        yield
+    finally:
+        active[key] -= 1
+        if not active[key]:
+            del active[key]
+
+
+def _service_control(name, body):
+    signature = inspect.signature(body)
+    callback = _CALLBACK_CONTROLS.get(name)
+
+    @functools.wraps(body)
+    def control(self, page, *args, **kwargs):
+        client = self._service
+        if client is None or id(self) in _local_control_scope.__dict__.get("active", ()):
+            return body(self, page, *args, **kwargs)
+        bound = signature.bind(self, page, *args, **kwargs)  # same TypeError as a local call
+        if callback is not None and (name == "scan_action" or bound.arguments.get(callback) is not None):
+            return body(self, page, *args, **kwargs)
+        window = self._service_window
+        if window not in self._no_controls:
+            from uc_browser.service.client import ControlsUnavailable
+
+            target_id = self._targets.target_id(page)
+            try:
+                return client.control(window, target_id, name, args, kwargs)
+            except ControlsUnavailable:
+                if window not in self._no_controls:
+                    self._no_controls.add(window)
+                    logger.warning(
+                        "controls unavailable on window %s (engine none); running %s locally",
+                        window, name,
+                    )
+        # Engine-less window: the method's own body, on the caller's Page, is
+        # the faithful answer (never a table of defaults).
+        with _local_control(self):
+            return body(self, page, *args, **kwargs)
+
+    return control
+
+
+def _install_service_controls() -> tuple:
+    names = []
+    for attr, fn in list(vars(UCBrowser).items()):
+        if attr.startswith("_") or not inspect.isfunction(fn):
+            continue
+        if list(inspect.signature(fn).parameters)[1:2] != ["page"]:
+            continue
+        setattr(UCBrowser, attr, _service_control(attr, fn))
+        names.append(attr)
+    return tuple(sorted(names))
+
+
+#: The page-taking controls (39 today), in name order.
+CONTROL_NAMES = _install_service_controls()

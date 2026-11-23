@@ -18,6 +18,12 @@ litellm[proxy]<2,>=1.82.4
 [mcp]
 mcp[cli]<2,>=1
 
+[service]
+fastapi>=0.115
+uvicorn>=0.30
+psutil>=5.9
+playwright-stealth<3,>=2.0.2
+
 [stealth]
 playwright-stealth<3,>=2.0.2
 

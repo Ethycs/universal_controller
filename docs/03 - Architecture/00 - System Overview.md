@@ -1,9 +1,9 @@
 # System Overview
 
 **Status**: CURRENT — the single trusted map
-**Date**: 2026-08-27
-**Applies to**: the whole repo as built (much of the Python driver layer is UNCOMMITTED in the working tree as of this date — see `docs/07 - Status Reports/2026-08-27_session-handoff.md`)
-**Depends on**: `docs/01 - Design/00 - Chat-Window-to-API Design.md` (rationale)
+**Date**: 2026-11-23 (service substrate reconciled; older subsystem descriptions retain their historical scope)
+**Applies to**: the repo as built, including the independent local service through handoff task 5
+**Depends on**: `docs/01 - Design/00 - Chat-Window-to-API Design.md`, `docs/02 - Implementation/01 - UC Service — Build Spec.md`
 
 ## Executive summary
 
@@ -60,6 +60,8 @@ UC turns any web chat UI into a callable API: a site-agnostic JS engine detects 
 - **Outputs**: `UCBrowser` (launch modes `CHROME` / `CHROMIUM_EXT` / `NATIVE_CDP` / `HEADLESS`; `chat()` is the full generic round-trip: scored input discovery → ML fallback → framework-aware setText → proximity send-button → trigram-diff response extraction); `sites/grok*.py` (the hand-tuned grok adapter: fast path + conversation CRUD); `sites/generic.py` `GenericClient` (any registry site via `UCBrowser.chat()`, one tab per (site, session) pair for conversation continuity).
 - **Constraints**: sync Playwright is thread-affine — one instance per thread, ever; the Chrome profile is single-writer; one send at a time (locks serialize).
 
+With `UC_SERVICE_URL`, `UCBrowser` registers a pid-bound client, attaches over CDP, creates leased pages through HTTP, and sends page controls to the service. `new_page()` is public in both modes; raw page scripting and interception remain local. Without that variable, existing in-process use remains available; native launch now uses port 0 and held-profile guards.
+
 ## 5. Registry (`uc_browser/registry.py`)
 
 - **Domain**: which sites UC knows about, operationally (distinct from bench oracles, which never leave `bench/`).
@@ -77,10 +79,24 @@ UC turns any web chat UI into a callable API: a site-agnostic JS engine detects 
 
 ## 7. Status server (`uc_browser/status_server.py`)
 
-- **Domain**: one uvicorn process presenting registry × health.
-- **Inputs**: registry + health store; a background scheduler (60 s tick) probing each site on its interval.
-- **Outputs**: `GET /` human uptime page; `GET /availability` JSON live menu (incl. `models_available`); `POST /probe/{name}`; `/mcp` streamable-http endpoint mounting the site tools from `uc_browser/mcp/site_tools.py` (`uc_site_add/search/list/probe`, `uc_availability`).
-- **Constraints**: port 4010 (`UC_STATUS_PORT` overrides); the litellm proxy pass-through depends on it.
+- **Domain**: one loopback uvicorn process presenting registry × health and owning configured browser windows.
+- **Inputs**: registry/health store, unchanged optional probe scheduler, `UC_WINDOWS_FILE` (default `data/windows.json`).
+- **Outputs**: existing status/availability/probe/MCP routes plus `/windows`, `/clients`, pages, controls, cookies, fetch and snapshots. Site-session routes are not implemented.
+- **Constraints**: `127.0.0.1:4010` (`UC_STATUS_PORT` overrides); the litellm proxy pass-through depends on it. Native Chrome and Chromium each use their own profile and browser-selected loopback CDP port.
+
+### Service substrate (`uc_browser/service/`)
+
+| Component | Owns |
+|---|---|
+| `windows.py`, `profiles.py` | validated window specs, owner threads, lazy launch/relaunch, process/profile ownership and graceful shutdown |
+| `workers.py` | thread-local Playwright runtimes; bounded short/long lanes; target cache and event pumping; on-demand native engine injection |
+| `leases.py` | pid/start-time client identities, page leases, label revocation, dead-client reaping and raw-page sweep |
+| `operations.py`, `api.py` | JSON/NDJSON HTTP operations; retained service-owned fetch page per origin; cookies and HTML/PNG/MHTML |
+| `client.py`, `targets.py` | browser-independent HTTP client; separately loaded CDP target resolver for `UCBrowser` |
+
+The owner closes leased pages independently of a blocked client. Measured revocation: `wait_for_timeout(600000)` failed with `TargetClosedError` in 0.04 s. Service-owned fetch pages survive the zero-client sweep. Each active window can use up to one owner plus two lanes of `control_workers` drivers.
+
+Site adapters, provider pinned threads, health-probe ownership and Grok MCP hosting remain unchanged pending tasks 6–8. No live deployment or profile migration has occurred. Firefox/WebKit owner-thread operation paths exist but were not live-tested; Chromium and installed Chrome were.
 
 ## 8. litellm provider (`uc_browser/llm_providers/uc.py`)
 

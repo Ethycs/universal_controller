@@ -43,10 +43,10 @@ pixi run bench-capture      # recapture fixtures from live sites (headful; minut
 
 `bench` and `bench-check` are offline and deterministic (MHTML fixtures + CDP injection); only `bench-capture` touches the network.
 
-## 5. Status server
+## 5. Status and browser service
 
 ```bash
-pixi run status-server      # http://127.0.0.1:4010/
+DISPLAY=:0 XAUTHORITY=/home/rabbit/.Xauthority pixi run service  # http://127.0.0.1:4010/
 ```
 
 | Endpoint | What |
@@ -55,8 +55,14 @@ pixi run status-server      # http://127.0.0.1:4010/
 | `GET /availability` | JSON live menu: registry × health, incl. currently callable litellm models |
 | `POST /probe/{name}` | Force an immediate probe of one site |
 | `*  /mcp` | MCP endpoint (streamable-http): `uc_site_add` / `uc_site_search` / `uc_site_list` / `uc_site_probe` / `uc_availability` |
+| `/windows`, `/clients`, `/windows/{name}/pages` | Window/CDP discovery, pid-bound clients and leased pages |
+| `/windows/{name}/controls/{control}`, `/fetch`, `/cookies`, `/snapshot` | Controls and HTTP-only operations; the last three also sit under `/windows/{name}` |
 
 A background scheduler probes each registered site on its interval (default 15 min); probes are serialized on one worker thread.
+
+`UC_WINDOWS_FILE` selects a windows config; with no file, the service defines one lazy local Chromium/extension window. Build `extension/dist/uc-extension.js` before starting even lazy extension/inject windows: startup refuses a missing bundle. No live profile or service unit is installed by these commands.
+
+Consumers opt in with `UC_SERVICE_URL=http://127.0.0.1:4010` and the configured `UC_WINDOW`; leaving the URL unset retains in-process operation. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Site-session endpoints and consumer migration are not implemented yet.
 
 ## 6. litellm proxy
 
