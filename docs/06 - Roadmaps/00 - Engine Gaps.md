@@ -1,7 +1,7 @@
 # Engine Gaps
 
 **Status:** Living Document — 2026-08-27
-**Applies to:** `src/` engine, `bench/` scoring coverage, `uc_browser/health.py` heuristics
+**Applies to:** `src/` engine, `bench/` scoring coverage, `uc_browser/health.py` heuristics and `uc_browser/browser.py` login-wall predicate
 **Depends on:** `bench/results/baseline.json` (the numbers below come from it and from the 2026-08-27 domain sweep — see `docs/07 - Status Reports/2026-08-27_session-handoff.md`)
 
 ## Current status
@@ -10,6 +10,13 @@
 - 🟡 Negatives: 1 false positive of 7 (bootstrap-forms) — the gate has no headroom
 - 🔲 Send-level verification: not measured at all — the bench stops at detection
 - 🔲 Login-walled and widget-iframe coverage: large blind spots in the corpus
+
+### Dead login-wall predicate (2026-11-23)
+
+**BUG:** `UCBrowser.has_login_wall(page)` tests `h.get("blocking")` on `detect(page, "login")` results, but the current engine does not emit `blocking`. It therefore returns `False` for current engine results even when a login wall is present. This is a dead predicate, not merely a missing Grok phrase such as “Sign up to continue”. Consumers relying on it cannot distinguish that wall from an accessible page; this is separate from the marketing-page false positives tracked below.
+
+**Decision required:** the owner must choose whether the engine should emit a defined `blocking` signal or Python should use a different login-wall contract. No generic patch is implemented. An adapter-specific Grok auth check remains task 6, before live session migration. Evidence and affected paths: `docs/08 - Analysis/01 - Engine-Absent Control Behavior.md`; independently confirmed by PBX 210-1001.
+
 
 ## Tier 0 — Quick wins
 

@@ -1,6 +1,6 @@
 # UC Service Build — Handoff
 
-**Date**: 2026-11-23 **Status**: 🟡 IN FLIGHT — nothing is built
+**Date**: 2026-11-23 **Status**: Historical pre-build handoff; Known bugs item 1 corrected after the control audit. Current build results: `2026-11-23_uc-service-tasks-0-5.md`
 **Scope**: `Ethycs/universal_controller`, `main` at `5e3dd0a` — the docs this brief cites are **uncommitted**, in `/home/rabbit/event_tool/ext/universal_controller/docs/` on host `smallblackbox`
 **From**: PBX `210-1001` (the `event_tool` session that wrote the design) **To**: PBX `210-1002`
 **Depends on**: `docs/01 - Design/02 - UC as a Local Service.md`, `docs/02 - Implementation/01 - UC Service — Build Spec.md`, `docs/08 - Analysis/00 - Service Prototype Measurements.md`, `docs/00 - Theory/00 - Windows, Transport and Control.md`
@@ -42,7 +42,7 @@ Measured, and safe to build on (Analysis §3): one process can launch windows wi
 
 ## Known bugs to fix
 
-1. `BUG:` Grok's signed-out page ("Sign up to continue") is not recognised by `has_login_wall`, so a signed-out send hangs until its timeout (Design G9; observed 2026-11-17). The service needs this to return `auth_required`.
+1. `BUG:` `has_login_wall` is a dead predicate with current engine results: it tests `h.get("blocking")`, but the engine emits no `blocking` key, so it returns `False` even on a login wall. The signed-out Grok hang is not merely failure to recognise “Sign up to continue” (Design G9; symptom observed 2026-11-17). Task 6 needs an adapter-specific check returning `auth_required`. A generic repair—emit a defined `blocking` signal or change the Python predicate—requires the owner's decision and is not implemented. Tracked in `docs/06 - Roadmaps/00 - Engine Gaps.md`.
 2. `BUG:` `_start_native_chrome` uses fixed port 9222 (`browser.py:614` on `main`) and attaches to whatever answers it. Replace with port 0 and the held-profile check (Build Spec §5).
 3. `unverified`: in probe B, one page of window `a` was unaccounted for after a client disconnected (row 11). Re-check when the probe is rebuilt.
 
