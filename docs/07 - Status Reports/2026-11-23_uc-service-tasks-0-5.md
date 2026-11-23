@@ -75,6 +75,12 @@ Focused verification: `pixi run -e dev pytest -q tests/test_service_client.py -k
 
 Recorded PBX 210-1001's baseline correction in Build Spec §8 and Setup §3: its 100/4 run had no extension bundle and skipped three bundle-dependent checks. Our built-bundle 102/1/1 run exposed `test_synthetic_fixtures_score_correctly`, later repaired by capturing routed-URL MHTML. This was not a regression against a previously passing Linux fixture test. No baseline or live injection checks were rerun for this documentation correction.
 
+## 7. Authorized authoritative-target follow-up
+
+Lease maintenance now uses browser-level `Target.getTargets` and `Target.closeTarget` on CDP windows, excluding non-page targets. Firefox/WebKit retain Page-based enumeration and closure. Reaping reads fresh owner inventory instead of the status endpoint's cached timeout/error fallback; enumeration failure leaves lease records intact. Cleanup owner jobs do not launch or relaunch windows.
+
+Verification: `pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_windows_core.py tests/test_service_targets.py tests/test_service_fetch.py` → **65 passed**. The real Chromium scenario created a raw page in a separate browser context, disabled owner `scan`/`resolve`, and revoked a client blocked in a 600-second wait; it failed with a closed-page error within the test's 5-second limit. The raw-page sweep removed that separate-context page while preserving the internal fetch page and one blank page. Unit coverage also verifies non-CDP closure, lease preservation on stale/failed inventory, and refusal to launch for cleanup. Native Chrome and Firefox/WebKit binaries were not rerun in this follow-up.
+
 ## Verification
 
 ```bash

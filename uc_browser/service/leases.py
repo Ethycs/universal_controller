@@ -109,7 +109,7 @@ class LeaseStore:
         with self.lock:
             if not window.running:
                 raise ServiceError("no_such_target", "window is not running", 404)
-            window.owner(lambda rt: rt.resolve(target).close()).result()
+            window.owner(lambda rt: rt.close_target(target), launch=False).result()
             self.leases.pop((name, target), None)
             self.internal.discard((name, target))
             return True
@@ -121,13 +121,13 @@ class LeaseStore:
             count = 0
             for target in targets:
                 try:
-                    rt.resolve(target).close()
+                    rt.close_target(target)
                     count += 1
                 except ServiceError as exc:
                     if exc.code != "no_such_target":
                         raise
             return count
-        return window.owner(close).result()
+        return window.owner(close, launch=False).result()
 
     def release(self, client_id: str) -> int:
         with self.lock:
@@ -167,19 +167,23 @@ class LeaseStore:
                 if current != client.start_time:
                     self.release(client_id)
             for name, window in self.manager.windows.items():
-                info = self.window_info(name)
-                live = {p["target_id"] for p in info["pages"]}
+                self._generation(window)
+                # Never prune leases from Window.info's timeout/error fallback.
+                # An enumeration failure must preserve ownership for the next pass.
+                pages = (window.owner(lambda rt: rt.pages_info(), launch=False).result()
+                         if window.running else [])
+                live = {p["target_id"] for p in pages}
                 self.leases = {k: v for k, v in self.leases.items() if k[0] != name or k[1] in live}
                 self.internal = {k for k in self.internal if k[0] != name or k[1] in live}
-                if not window.running or info["clients"]:
+                if not window.running or any(c.window == name for c in self.clients.values()):
                     continue
-                orphaned = [p for p in info["pages"]
+                orphaned = [p for p in pages
                             if (name, p["target_id"]) not in self.leases
                             and (name, p["target_id"]) not in self.internal]
                 blank = next((p for p in orphaned if p["url"] == "about:blank"), None)
                 if blank is None:
                     # Keep one blank target before closing the last real tab.
-                    window.owner(lambda rt: rt.target_id(rt.context.new_page())).result()
+                    window.owner(lambda rt: rt.target_id(rt.context.new_page()), launch=False).result()
                 self._close_targets(window, [p["target_id"] for p in orphaned if p is not blank])
 
     def _run(self):

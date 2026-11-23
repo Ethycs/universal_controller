@@ -201,6 +201,9 @@ class FakePage:
     def is_closed(self):
         return self.closed
 
+    def close(self):
+        self.closed = True
+
     def wait_for_timeout(self, ms):
         pass
 
@@ -242,7 +245,9 @@ def test_non_cdp_ids_are_stable_and_missing_target_is_distinct_404():
     assert len(ids) == 2 and rt.scan().keys() == ids.keys()
     tid1 = rt.target_id(p1)
     assert rt.resolve(tid1) is p1
-    p1.closed = True
+    rt.close_target(tid1)
+    assert p1.is_closed()
+    assert [p["target_id"] for p in rt.pages_info()] == [rt.target_id(p2)]
     started = time.monotonic()
     with pytest.raises(ServiceError) as err:
         rt.resolve(tid1)
@@ -527,6 +532,16 @@ def test_non_cdp_work_runs_on_owner(tmp_path):
     assert w.work(lambda rt: threading.get_ident(), long=True).result(5) == owner_tid
     w.close()
 
+
+
+def test_cleanup_owner_job_does_not_launch_a_stopped_window(tmp_path):
+    launches = []
+    w = make_window(tmp_path, lambda spec: launches.append(FakeLaunch()) or launches[-1])
+    with pytest.raises(ServiceError) as exc:
+        w.owner(lambda rt: rt.pages_info(), launch=False).result(2)
+    assert exc.value.code == "window_stopped"
+    assert not launches and not w.running
+    w.close()
 
 def test_work_uses_configured_queue_timeout_and_keeps_explicit_values(tmp_path):
     launch = FakeLaunch()

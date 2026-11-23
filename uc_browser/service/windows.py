@@ -660,11 +660,11 @@ class Window:
                 return _closed_future(exc)
             return job.future
 
-    def owner(self, fn) -> cf.Future:
-        """Run ``fn(runtime)`` on the window's single owner thread, launching
-        the browser first if it is not running (lazy relaunch). Keep ``fn``
-        short. Never blocks: launch happens on the owner thread."""
-        return self._submit_owner(fn, launch=True)
+    def owner(self, fn, *, launch: bool = True) -> cf.Future:
+        """Run ``fn(runtime)`` on the window's owner thread. By default launch
+        first if needed; cleanup uses ``launch=False`` so a stopped window
+        stays stopped. Keep ``fn`` short. Never blocks."""
+        return self._submit_owner(fn, launch=launch)
 
     def start(self, timeout: float = LAUNCH_TIMEOUT_S) -> dict:
         """Launch if needed and return ``info()``. Blocks; call from a plain thread."""

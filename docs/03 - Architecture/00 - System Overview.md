@@ -89,12 +89,14 @@ With `UC_SERVICE_URL`, `UCBrowser` registers a pid-bound client, attaches over C
 | Component | Owns |
 |---|---|
 | `windows.py`, `profiles.py` | validated window specs, owner threads, lazy launch/relaunch, process/profile ownership and graceful shutdown |
-| `workers.py` | thread-local Playwright runtimes; bounded short/long lanes with per-window `queue_timeout_s`; target cache and event pumping; on-demand native engine injection |
-| `leases.py` | pid/start-time client identities, page leases, label revocation, dead-client reaping and raw-page sweep |
+| `workers.py` | thread-local Playwright runtimes; bounded short/long lanes with per-window `queue_timeout_s`; Page resolution/event pumping; browser-level CDP target inventory and closure; on-demand native engine injection |
+| `leases.py` | pid/start-time client identities, page leases, label revocation, dead-client reaping and raw-page sweep using fresh authoritative inventory, never cached status; cleanup cannot launch a stopped window |
 | `operations.py`, `api.py` | JSON/NDJSON HTTP operations; retained service-owned fetch page per origin, serialized requests with explicit credentials and per-request referrer (no same-origin re-navigation); cookies and HTML/PNG/MHTML |
 | `client.py`, `targets.py` | browser-independent HTTP client; finite control read budgets include discovered queue allowance and margin, default unbounded; separately loaded CDP target resolver for `UCBrowser` |
 
 The owner closes leased pages independently of a blocked client. Measured revocation: `wait_for_timeout(600000)` failed with `TargetClosedError` in 0.04 s. Service-owned fetch pages survive the zero-client sweep. Each active window can use up to one owner plus two lanes of `control_workers` drivers.
+
+CDP lease maintenance uses `Target.getTargets`/`Target.closeTarget`, including raw pages created in another browser context. Firefox/WebKit keep their owner-Page path. Enumeration failure does not discard ownership records. The focused lease/core/fetch checks passed 65 tests, including real Chromium revocation of a blocked client with owner Page lookup disabled; the sweep preserved internal fetch pages and one blank page.
 
 Site adapters, provider pinned threads, health-probe ownership and Grok MCP hosting remain unchanged pending tasks 6–8. No live deployment or profile migration has occurred. Firefox/WebKit owner-thread operation paths exist but were not live-tested; Chromium and installed Chrome were.
 

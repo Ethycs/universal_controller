@@ -45,6 +45,13 @@ class Runtime:
             raise ServiceError("no_such_target", "closed", 404)
         return self.pages[target]
 
+    def close_target(self, target):
+        self.resolve(target).close()
+
+    def pages_info(self):
+        return [{"target_id": p.target, "url": p.url, "age_s": 0}
+                for p in self.pages.values()]
+
     def add_cookies(self, cookies):
         self.jar.extend(cookies)
 
@@ -65,10 +72,13 @@ class Window:
             self.generation += 1
         return self.info()
 
-    def owner(self, fn):
-        self.start()
+    def owner(self, fn, *, launch=True):
         future = Future()
         try:
+            if launch:
+                self.start()
+            elif not self.running:
+                raise ServiceError("window_stopped", "not running", 503)
             future.set_result(fn(self.rt))
         except Exception as exc:
             future.set_exception(exc)
@@ -157,6 +167,25 @@ def test_sweep_preserves_raw_pages_while_client_alive_and_internal_pages_after(s
     leases.reap()
     assert raw not in window.rt.pages
     assert internal in window.rt.pages
+
+
+def test_reaper_does_not_discard_leases_from_stale_status_or_failed_inventory(state, monkeypatch):
+    manager, leases, _ = state
+    client = leases.register(101, "job", "a")
+    target = leases.create_page("a", client)
+    window = manager.get("a")
+    monkeypatch.setattr(window, "info", lambda: {"pages": []})
+    leases.reap()
+    assert leases.leases["a", target] == client
+
+    def fail_inventory():
+        raise ServiceError("window_stopped", "CDP unavailable", 503)
+
+    monkeypatch.setattr(window.rt, "pages_info", fail_inventory)
+    with pytest.raises(ServiceError):
+        leases.reap()
+    assert leases.leases["a", target] == client
+    assert leases.revoke("job") == {"clients": 1, "closed": 1}
 
 
 def test_client_cannot_lease_page_on_another_window(state):

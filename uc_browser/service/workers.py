@@ -254,6 +254,7 @@ class Runtime:
         self._context = context
         self._ids: dict = {}  # Page -> target id
         self._seen: dict[str, float] = {}  # target id -> monotonic first seen
+        self._target_session = None  # browser-level CDP; owned by this runtime
         self._receiver = None
         self._closed = False
         self._fetch_bindings: dict = {}  # per-page state held by operations (owner/worker local)
@@ -375,13 +376,51 @@ class Runtime:
             raise no_such_target("page is closed or not part of this window")
         return tid
 
+    def _cdp_targets(self) -> list[dict]:
+        self._own()
+        if self._target_session is None:
+            self._target_session = self._browser.new_browser_cdp_session()
+        return [t for t in self._target_session.send("Target.getTargets")["targetInfos"]
+                if t["type"] == "page"]
+
     def pages_info(self) -> list[dict]:
-        """``[{target_id, url, age_s}]``, freshly pumped."""
+        """Browser-authoritative page targets; non-CDP uses the owner Pages."""
+        self._own()
         now = time.monotonic()
+        if self.cdp is None:
+            return [
+                {"target_id": tid, "url": page.url, "age_s": round(now - self._seen.get(tid, now), 1)}
+                for tid, page in self.scan().items()
+            ]
+        targets = self._cdp_targets()
+        live = {t["targetId"] for t in targets}
+        for tid in list(self._seen):
+            if tid not in live:
+                del self._seen[tid]
         return [
-            {"target_id": tid, "url": page.url, "age_s": round(now - self._seen.get(tid, now), 1)}
-            for tid, page in self.scan().items()
+            {"target_id": t["targetId"], "url": t["url"],
+             "age_s": round(now - self._seen.setdefault(t["targetId"], now), 1)}
+            for t in targets
         ]
+
+    def close_target(self, target_id: str) -> None:
+        """Close a page without waiting for its Page object to reach the owner."""
+        self._own()
+        if self.cdp is None:
+            self.resolve(target_id).close()
+            return
+        if not any(t["targetId"] == target_id for t in self._cdp_targets()):
+            raise no_such_target(f"window {self.window} has no page {target_id}")
+        try:
+            result = self._target_session.send("Target.closeTarget", {"targetId": target_id})
+        except PlaywrightError:
+            # It may have closed between enumeration and the close command.
+            # Transport/enumeration failure is not evidence of target absence.
+            if not any(t["targetId"] == target_id for t in self._cdp_targets()):
+                raise no_such_target(f"page {target_id} already closed") from None
+            raise
+        if not result["success"]:
+            raise ServiceError("close_failed", f"browser refused to close page {target_id}", 500)
 
     def _browser_has(self, target_id: str) -> bool | None:
         """Does the browser itself still have this page target? None: unknown."""
