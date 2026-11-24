@@ -32,7 +32,7 @@ logger = logging.getLogger("uc_browser.mcp.site_tools")
 
 def _wrap(fn):
     """Return errors as data — FastMCP serializes returns; raising is ugly
-    client-side. Mirrors grok_tools._wrap_auth."""
+    client-side. Grok tools use the same error-as-data convention."""
 
     @functools.wraps(fn)  # keeps the signature FastMCP builds schemas from
     def _inner(*args, **kwargs):

@@ -3,10 +3,10 @@
 # Run:
 #   pixi run -e dev litellm --config litellm.config.yaml --port 4000
 #
-# WARNING: keep --num_workers at 1. The handler holds a single GrokClient
-# whose Chrome profile is single-writer; running multiple proxy workers
-# would launch competing browser processes against the same on-disk
-# profile and corrupt it.
+# Set UC_GROK_SERVICE_URL explicitly for Grok; its browser and sessions live
+# in the independent UC service. This mixed-site example still includes
+# in-process generic clients: keep --num_workers 1 for their profiles.
+# Use grok-proxy.config.yaml for the deployed Grok-only HTTP client.
 #
 # Once the proxy is up, any OpenAI-shaped client works:
 #
@@ -29,8 +29,8 @@
 #   )
 
 model_list:
-  # Public name = "uc-grok". Internally routed to "uc/grok" which our
-  # CustomLLM resolves to the GrokClient singleton.
+  # Public name = "uc-grok". Internally routed to "uc/grok", whose
+  # CustomLLM calls the UC service's Grok site operations.
   - model_name: uc-grok
     litellm_params:
       model: uc/grok
@@ -73,9 +73,8 @@ model_list:
   # opt-out: extra_body={"no_backup": true}.
 
 litellm_settings:
-  # Wire the persistent GrokClient-backed handler into the provider map
-  # at proxy startup. The dotted path points at the module-level singleton
-  # in src/event_harvester/llm_providers/uc.py.
+  # Wire the service-backed Grok / local generic handler into the provider
+  # map. Its implementation lives in uc_browser/llm_providers/uc.py.
   custom_provider_map:
     # Routed through uc_provider_loader.py (next to this config) because
     # the proxy resolves dotted paths as files relative to the config
@@ -87,9 +86,9 @@ litellm_settings:
   drop_params: true
 
 general_settings:
-  # Browser automation is single-threaded by construction. Force a single
-  # worker so we don't open competing browsers against the same profile.
-  # (Pass `--num_workers 1` on the CLI as well — this is belt-and-braces.)
+  # Generic site clients in this mixed-site example still own browsers.
+  # Grok itself is HTTP-only; its concurrency limit lives in the service.
+  # Pass --num_workers 1 on the CLI for the remaining generic clients.
   worker_concurrency: 1
 
   # Live availability menu. Forwards to the UC status server (run it

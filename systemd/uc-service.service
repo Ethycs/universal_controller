@@ -1,0 +1,22 @@
+[Unit]
+Description=Universal Controller browser and site service (loopback)
+After=graphical-session.target network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/universal_controller
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+Environment=PYTHONUTF8=1
+Environment=UC_AUTO_BOOTSTRAP=0
+Environment=UC_WINDOWS_FILE=%h/.config/universal-controller/windows.json
+Environment=UC_SESSIONS_FILE=%h/.local/state/universal-controller/sessions.json
+ExecStart=%h/.pixi/bin/pixi run --frozen python -m uc_browser.status_server
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=45
+UMask=0077
+
+[Install]
+WantedBy=default.target

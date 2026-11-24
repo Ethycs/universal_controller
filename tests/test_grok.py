@@ -322,6 +322,259 @@ def test_distinct_session_keys_get_distinct_pages(grok_client, mock_uc):
     assert "beta" in grok_client._page_locks
 
 
+# ── Project routing: the ``chat`` parameter is part of the location ──
+
+PROJECT_URL = "https://grok.com/project/eb4fb4c3-2c98-4c9e-b3f0-9de16f244137"
+CHAT_A = "9a321760-da6c-4ece-84cd-2e138e9a56b8"
+CHAT_B = "0b7c2f1e-5d4a-4f3b-9c8d-1a2b3c4d5e6f"
+
+
+@pytest.mark.parametrize(
+    "a,b,same",
+    [
+        (f"{PROJECT_URL}?chat={CHAT_A}", f"{PROJECT_URL}?chat={CHAT_B}", False),
+        (f"{PROJECT_URL}?chat={CHAT_A}", PROJECT_URL, False),
+        (PROJECT_URL, f"{PROJECT_URL}?chat={CHAT_A}", False),
+        (f"{PROJECT_URL}?chat={CHAT_A}", f"https://grok.com/c/{CHAT_A}", False),
+        (f"https://grok.com/c/{CHAT_A}", f"https://grok.com/c/{CHAT_B}", False),
+        # rid noise, trailing slash and host case do not matter
+        (f"{PROJECT_URL}?chat={CHAT_A}&rid=1", f"{PROJECT_URL}?rid=2&chat={CHAT_A}", True),
+        (f"{PROJECT_URL}/", PROJECT_URL, True),
+        (f"https://GROK.com/c/{CHAT_A}", f"https://grok.com/c/{CHAT_A}?rid=x", True),
+        ("https://grok.com/", "https://grok.com", True),
+    ],
+)
+def test_same_path_compares_the_chat_parameter(a, b, same):
+    assert GrokClient._same_path(a, b) is same
+
+
+def test_navigation_between_two_chats_of_one_project_really_navigates(grok_client, mock_uc):
+    """A caller must never send into chat A while believing it is chat B."""
+    _, page = mock_uc
+    page.url = f"{PROJECT_URL}?chat={CHAT_A}&rid=1"
+    grok_client._navigate_in(page, f"{PROJECT_URL}?chat={CHAT_B}", wait_ms=0)
+    page.goto.assert_called_once()
+    assert page.goto.call_args.args[0] == f"{PROJECT_URL}?chat={CHAT_B}"
+
+    page.goto.reset_mock()
+    page.url = f"{PROJECT_URL}?chat={CHAT_B}"
+    grok_client._navigate_in(page, f"{PROJECT_URL}?chat={CHAT_B}&rid=9", wait_ms=0)
+    page.goto.assert_not_called()
+
+    page.url = f"{PROJECT_URL}?chat={CHAT_B}"
+    grok_client._navigate_in(page, PROJECT_URL, wait_ms=0)  # chat -> project landing
+    page.goto.assert_called_once()
+
+
+def test_row_selector_matches_classic_and_project_anchors():
+    sel = grok_mod._row_selector(CHAT_A)
+    assert f'a[href*="/c/{CHAT_A}"]' in sel and f'a[href*="chat={CHAT_A}"]' in sel
+
+
+def test_regenerate_reads_grok_assistant_blocks(grok_client, mock_uc):
+    _, page = mock_uc
+    seen = []
+
+    def evaluate(js, arg=None):
+        seen.append(arg)
+        if arg == grok_mod._SELECTORS["regenerate_button"]:
+            return True
+        return "old text" if len(seen) == 1 else "new text"
+
+    page.evaluate = MagicMock(side_effect=evaluate)
+    out = grok_client.regenerate(f"https://grok.com/c/{CHAT_A}", timeout_s=5)
+    assert out == {"ok": True, "response": "new text"}
+    assert seen[0] == grok_mod._SELECTORS["assistant_message"]
+    assert not any(isinstance(a, str) and "data-message-author-role" in a for a in seen)
+
+
+def test_send_reports_a_timeout_instead_of_a_clean_finish(grok_client, mock_uc):
+    _, page = mock_uc
+    page.evaluate.side_effect = [0, {"success": True}, {}]
+    out = grok_client.send("hello", timeout_s=0)
+    assert out["timed_out"] is True and out["response"] == ""
+
+
+def test_send_without_timeout_has_no_timed_out_flag(grok_client, mock_uc):
+    _, page = mock_uc
+    page.evaluate.side_effect = [
+        0, {"success": True}, {},
+        {"ready": True, "text": "done"}, {"ready": True, "text": "done"}, {"ready": True, "text": "done"},
+    ]
+    assert "timed_out" not in grok_client.send("hello")
+
+
+# ── Borrowed-page mode (service sessions) ────────────────────────────
+
+
+def test_borrowing_client_never_owns_a_browser_or_page():
+    uc, page = MagicMock(), MagicMock()
+    page.is_closed.return_value = False
+    page.url = PROJECT_URL
+    with patch.object(grok_mod, "UCBrowser", side_effect=AssertionError("must not launch")):
+        client = GrokClient.borrowing(uc, page, home_url=PROJECT_URL)
+        assert client._ensure_uc() is uc
+        assert client._get_session_page("alpha") is page
+        assert client._get_session_page("beta") is page  # every key is the one page
+        with client._session("gamma") as p:
+            assert p is page
+        assert client.new_chat() == {"url": PROJECT_URL, "conversation_id": None}
+        client.close()
+        client.close()
+    page.close.assert_not_called()
+    uc.open.assert_not_called()
+    uc.start.assert_not_called()
+    uc.close.assert_not_called()
+    assert GrokClient.GROK_HOME == "https://grok.com/"  # the class default is untouched
+
+
+def test_borrowing_client_refuses_a_closed_page():
+    page = MagicMock()
+    page.is_closed.return_value = True
+    client = GrokClient.borrowing(MagicMock(), page)
+    with pytest.raises(grok_mod.GrokError):
+        client._get_session_page("x")
+    page.close.assert_not_called()
+
+
+def test_borrowing_client_skips_the_local_login_probe():
+    """Auth diagnosis belongs to the adapter; the borrowed path never calls has_login_wall."""
+    uc, page = MagicMock(), MagicMock()
+    page.is_closed.return_value = False
+    client = GrokClient.borrowing(uc, page)
+    client._get_session_page("x")
+    uc.has_login_wall.assert_not_called()
+    uc.dismiss_cookies.assert_not_called()
+
+
+# ── Submit safety: a possibly-delivered message is never retyped ─────
+
+from uc_browser.sites import grok_fast  # noqa: E402
+from uc_browser.sites.grok import GrokPreSubmitError, GrokSubmitUncertain  # noqa: E402
+
+
+class _FastPage:
+    """Scripted page for ``GrokFastClient.send`` with a toolkit that reports failure."""
+
+    def __init__(self, *, on_toolkit_submit=None):
+        self.url = "https://grok.com/"
+        self.users = 0
+        self.on_toolkit_submit = on_toolkit_submit or (lambda page: None)
+        self.counts = {"set_text": 0, "toolkit_submit": 0, "trigger": 0}
+        self.wait_for_selector = MagicMock()
+
+    def is_closed(self):
+        return False
+
+    def wait_for_timeout(self, _ms):
+        pass
+
+    def evaluate(self, js, arg=None):
+        if js is grok_fast._INSTALL_JS:
+            return None
+        if "document.querySelectorAll(sel).length" in js:
+            return self.users if arg == grok_mod._SELECTORS["user_message"] else 0
+        if "__UC_grokToolkitReady" in js:
+            return True
+        if "__UC_setText" in js:
+            self.counts["set_text"] += 1
+            return {"success": True}
+        if "__UC_grokAttachmentInfo" in js:
+            return {"editor_chars": 5, "count": 0, "list_chips": 0, "remove_buttons": 0, "chips": []}
+        if "__UC_grokRemoveAttachments" in js:
+            return {"removed": 0, "remaining": 0}
+        if "__UC_grokToolkitSubmit" in js:
+            self.counts["toolkit_submit"] += 1
+            self.on_toolkit_submit(self)
+            return {"ok": False, "why": "all-submit-methods-failed"}
+        if "__UC_grokTriggerSubmit" in js:
+            self.counts["trigger"] += 1
+            return {"ok": False, "why": "all-submit-methods-failed"}
+        raise AssertionError(f"unexpected evaluate: {str(js)[:60]}")
+
+
+def _fast_client(page):
+    return grok_fast.GrokFastClient(grok_client=GrokClient.borrowing(MagicMock(), page))
+
+
+def _late_user_message(page):
+    page.users = 1
+
+
+def _late_navigation(page):
+    page.url = "https://grok.com/c/9a321760-da6c-4ece-84cd-2e138e9a56b8"
+
+
+@pytest.mark.parametrize("lands", [_late_user_message, _late_navigation])
+def test_failed_submit_chain_that_delivered_is_not_retyped(lands, monkeypatch):
+    monkeypatch.delenv("UC_GROK_DISABLE_TOOLKIT", raising=False)
+    page = _FastPage(on_toolkit_submit=lands)
+    with pytest.raises(GrokSubmitUncertain):
+        _fast_client(page).send("hello", conversation_url="https://grok.com/", timeout_s=5)
+    assert page.counts == {"set_text": 1, "toolkit_submit": 1, "trigger": 0}
+
+
+def test_failed_submit_chain_with_no_delivery_may_fall_back_once(monkeypatch):
+    monkeypatch.delenv("UC_GROK_DISABLE_TOOLKIT", raising=False)
+    page = _FastPage()
+    with pytest.raises(GrokPreSubmitError):
+        _fast_client(page).send("hello", conversation_url="https://grok.com/", timeout_s=5)
+    # toolkit attempt, then exactly one bespoke attempt; both proven undelivered
+    assert page.counts == {"set_text": 2, "toolkit_submit": 1, "trigger": 1}
+
+
+def test_send_with_fallback_retries_only_when_nothing_was_submitted(monkeypatch):
+    dom = MagicMock()
+    dom.send.return_value = {"response": "dom"}
+    fast = MagicMock()
+    monkeypatch.setattr(grok_mod, "get_grok_client", lambda: dom)
+    monkeypatch.setattr(grok_fast, "_get_fast_client", lambda: fast)
+
+    fast.send.side_effect = GrokPreSubmitError("setText failed")
+    assert grok_fast.send_with_fallback("m")["response"] == "dom"
+    assert dom.send.call_count == 1
+
+    dom.send.reset_mock()
+    for err in (GrokSubmitUncertain("maybe delivered"), RuntimeError("other"), grok_mod.GrokError("x")):
+        fast.send.side_effect = err
+        with pytest.raises(type(err)):
+            grok_fast.send_with_fallback("m")
+    dom.send.assert_not_called()
+
+
+# ── Diagnostics never carry account text ─────────────────────────────
+
+
+def test_empty_reply_diagnostic_is_structural_only():
+    fast = grok_fast.GrokFastClient(grok_client=MagicMock())
+    page = MagicMock()
+    page.evaluate.return_value = {"assistant_blocks": 1}
+    assert fast._capture_empty_diagnostic(page, "sel") == {"assistant_blocks": 1}
+    js = page.evaluate.call_args.args[0]
+    for leak in ("slice(", "last_assistant_snippet", "refusal_language:"):
+        assert leak not in js
+    page.evaluate.side_effect = ValueError("SECRET reply text")
+    assert fast._capture_empty_diagnostic(page, "sel") == {"diag_error": "ValueError"}
+
+
+def test_chip_and_composer_logging_omits_labels_and_markup(caplog):
+    caplog.set_level("DEBUG", logger="uc_browser.sites.grok_fast")
+    fast = grok_fast.GrokFastClient(grok_client=MagicMock())
+    seen_js = []
+
+    def run(info):
+        page = MagicMock()
+        page.evaluate.side_effect = lambda js, arg=None: (seen_js.append(js), info)[1]
+        fast._handle_chips(page, "msg")
+
+    run({"editor_chars": 0, "count": 1, "list_chips": 1, "remove_buttons": 1,
+         "chips": [{"label": "SECRET-FILE.txt"}]})
+    run({"editor_chars": 0, "count": 0})
+    assert "SECRET" not in caplog.text
+    assert "composer shows neither text nor an attachment" in caplog.text
+    assert not any("outerHTML" in js for js in seen_js)
+
+
 # ── Live integration smoke (opt-in via UC_GROK_LIVE=1) ───────────────
 
 

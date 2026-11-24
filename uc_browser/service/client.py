@@ -391,16 +391,27 @@ class ServiceClient:
         session_id: Optional[str] = None,
         stream: bool = False,
         wait: Optional[bool] = None,
+        ephemeral: bool = False,
         timeout: Any = None,
     ):
         """``POST /sites/{site}/{op}``. Unstreamed: the ``result``. Streamed: a
         ``ServiceStream`` of ``{"delta"}`` lines then ``{"result"}``; an
-        ``{"error"}`` line raises ``ServiceError``."""
+        ``{"error"}`` line raises ``ServiceError``.
+
+        ``ephemeral=True`` tells the service the session is a throwaway: its
+        conversation map entry is not persisted and is discarded when the
+        session is evicted for idleness. It is sent as a top-level
+        ``"ephemeral": true`` body key and only when true; the default sends
+        nothing, so an ordinary session is persistent exactly as before. It
+        does not close anything: the caller still decides whether to
+        ``forget_session``."""
         body = dict(kwargs or {})
         if session_id is not None:
             body["session_id"] = session_id
         if wait is not None:
             body["wait"] = wait
+        if ephemeral:
+            body["ephemeral"] = True
         path = _path("sites", site, op)
         if stream:
             body["stream"] = True

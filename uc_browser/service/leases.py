@@ -40,8 +40,9 @@ class LeaseStore:
         self.interval = interval
         self.clients: dict[str, Client] = {}
         self.leases: dict[tuple[str, str], str] = {}
-        # Fetch pages are owned by the service, not by a registered process.
-        self.internal: set[tuple[str, str]] = set()
+        # Pages owned by the service, not by a registered process: fetch pages
+        # (holder None) and site sessions (holder "session:<site>/<id>").
+        self.internal: dict[tuple[str, str], str | None] = {}
         self.generations: dict[str, int] = {}
         self.lock = threading.RLock()
         self._stop = threading.Event()
@@ -81,7 +82,7 @@ class LeaseStore:
         generation = window.generation
         if self.generations.get(name) != generation:
             self.leases = {k: v for k, v in self.leases.items() if k[0] != name}
-            self.internal = {k for k in self.internal if k[0] != name}
+            self.internal = {k: v for k, v in self.internal.items() if k[0] != name}
             self.generations[name] = generation
 
     def create_page(self, name: str, client_id: str) -> str:
@@ -95,13 +96,16 @@ class LeaseStore:
             self.leases[name, target] = client_id
             return target
 
-    def internal_page(self, name: str) -> str:
+    def internal_page(self, name: str, holder: str | None = None) -> str:
+        """A service-owned page, kept by the zero-client sweep. ``holder``
+        names its owner in ``/windows`` (``session:<site>/<id>``); fetch pages
+        leave it ``None``."""
         window = self.manager.get(name)
         with self.lock:
             window.start()
             self._generation(window)
             target = window.owner(lambda rt: rt.target_id(rt.context.new_page())).result()
-            self.internal.add((name, target))
+            self.internal[name, target] = holder
             return target
 
     def close_page(self, name: str, target: str) -> bool:
@@ -109,9 +113,16 @@ class LeaseStore:
         with self.lock:
             if not window.running:
                 raise ServiceError("no_such_target", "window is not running", 404)
-            window.owner(lambda rt: rt.close_target(target), launch=False).result()
+            try:
+                window.owner(lambda rt: rt.close_target(target), launch=False).result()
+            except ServiceError as exc:
+                if exc.code == "no_such_target":
+                    # Already closed elsewhere: its lease is meaningless, answer as before.
+                    self.leases.pop((name, target), None)
+                    self.internal.pop((name, target), None)
+                raise
             self.leases.pop((name, target), None)
-            self.internal.discard((name, target))
+            self.internal.pop((name, target), None)
             return True
 
     def _close_targets(self, window, targets) -> int:
@@ -153,7 +164,8 @@ class LeaseStore:
             self._generation(window)
             info["clients"] = sum(c.window == name for c in self.clients.values())
             for page in info["pages"]:
-                page["holder"] = self.leases.get((name, page["target_id"]))
+                page["holder"] = (self.leases.get((name, page["target_id"]))
+                                  or self.internal.get((name, page["target_id"])))
             return info
 
     def reap(self):
@@ -174,7 +186,7 @@ class LeaseStore:
                          if window.running else [])
                 live = {p["target_id"] for p in pages}
                 self.leases = {k: v for k, v in self.leases.items() if k[0] != name or k[1] in live}
-                self.internal = {k for k in self.internal if k[0] != name or k[1] in live}
+                self.internal = {k: v for k, v in self.internal.items() if k[0] != name or k[1] in live}
                 if not window.running or any(c.window == name for c in self.clients.values()):
                     continue
                 orphaned = [p for p in pages

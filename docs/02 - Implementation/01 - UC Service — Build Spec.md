@@ -1,7 +1,7 @@
 # UC Service — Build Spec
 
-**Status**: CURRENT for handoff tasks 0–5: independent environment, probes, windows, clients/leases, controls, HTTP operations and native Chrome are implemented and verified. Site sessions/routes, provider/MCP migration, systemd deployment and consumer moves remain DRAFT (tasks 6–8); no live profile has moved
-**Date**: 2026-11-23
+**Status**: CURRENT for tasks 0–6 and the independent UC/Grok user units. Grok profile ownership, NSFW chat/list/read and restart lifecycle are live-verified; the status report distinguishes deployed consumers from pending gateway cutover. Generic/health migration and non-Grok consumer moves remain pending.
+**Date**: 2026-11-24
 **Applies to**: new package `uc_browser/service/`; changes to `uc_browser/browser.py`, `uc_browser/status_server.py`, `uc_browser/sites/`, `uc_browser/llm_providers/uc.py`, `uc_browser/mcp/grok_tools.py`, `pyproject.toml`; consumer changes in `event_tool`
 **Depends on**: `docs/01 - Design/02 - UC as a Local Service.md` (what and why; lifecycle ids E1–E14 and G1–G15 are its §3), `docs/08 - Analysis/00 - Service Prototype Measurements.md` ("row N" is its §3), `docs/02 - Implementation/00 - Setup and Operations.md` (install, extension build, status server)
 
@@ -25,13 +25,13 @@ The design doc decides the shape. This doc is what to type: files, config, the w
 | `uc_browser/service/operations.py`, `errors.py` | new | fetch/cookies/snapshot jobs and browser-independent wire errors |
 | `uc_browser/service/targets.py` | new | client-side CDP target cache and delayed-page resolution |
 | `uc_browser/service/leases.py` | new | clients, leases, reaper, revocation by label, sweep |
-| `uc_browser/service/sessions.py` | not implemented (task 6) | planned `Session` and persisted `SessionStore` |
-| `uc_browser/service/api.py` | new | FastAPI router for §3; turns worker futures into responses and streams |
-| `uc_browser/service/client.py` | new | stdlib-only `ServiceClient`; importing it does not load Playwright, including through the package exports. HTTP helpers include future site routes; those routes are not implemented yet |
+| `uc_browser/service/sessions.py`, `site_api.py` | new (task 6) | bounded session workers, atomic persisted URL map, account send admission, independent stop, site router |
+| `uc_browser/service/api.py` | new | FastAPI router for window/client operations; turns worker futures into responses and streams |
+| `uc_browser/service/client.py` | new | stdlib-only `ServiceClient`; importing it does not load Playwright, including through package exports. Window and site HTTP helpers |
 | `uc_browser/browser.py` | change | explicit `UCBrowser` service mode (§4); in-process launch paths refuse a held profile |
-| `uc_browser/sites/grok.py`, `grok_fast.py`, `generic.py` | unchanged (task 6/8) | planned session-backed adapters; currently retain their existing lifecycle |
-| `uc_browser/llm_providers/uc.py` | unchanged (task 6/8) | provider still owns pinned executors and session maps |
-| `uc_browser/mcp/grok_tools.py` | unchanged (task 6) | planned thin client |
+| `uc_browser/sites/grok_service.py`, `grok.py`, `grok_fast.py` | change (task 6) | service-owned borrowed-page Grok adapter with configured project boundary; standalone local API remains explicit |
+| `uc_browser/llm_providers/uc.py` | change (task 6) | Grok uses `ServiceClient` and the service map; generic routes retain their own executor pending task 8 |
+| `uc_browser/mcp/grok_tools.py` | change (task 6) | HTTP-only Grok tools sharing the service map with the provider |
 | `uc_browser/status_server.py` | change | `create_app` builds the managers and includes the router; shuts windows down in its lifespan |
 | `pyproject.toml` | change | pixi task `service = "python -m uc_browser.status_server"` |
 | `scripts/service_probe.py` | new | probes B and C of the Analysis doc, kept as the live acceptance check (§8) |
@@ -47,11 +47,11 @@ Read once at service start from `UC_WINDOWS_FILE` (default `data/windows.json`).
 {
   "windows": {
     "harvest": {"browser": "chromium", "engine": "extension", "profile": "data/.uc_chromium_profile", "state_file": "data/.playwright_state.json"},
-    "grok":    {"browser": "chromium", "engine": "extension", "profile": "data/.grok/.uc_chromium_profile", "state_file": "data/.grok/state.json"},
+    "grok":    {"browser": "chromium", "engine": "extension", "profile": "data/.grok/.uc_chromium_profile"},
     "native":  {"browser": "chrome",   "engine": "inject",    "profile": "data/.uc_chrome_profile"}
   },
   "sites": {
-    "grok": {"window": "grok", "max_sessions": 4, "max_concurrent_sends": 1, "session_idle_s": 1800}
+    "grok": {"window": "grok", "folder": "NSFW", "folder_url": "https://grok.com/project/<project-id>", "max_sessions": 4, "max_concurrent_sends": 1, "session_idle_s": 1800}
   }
 }
 ```
@@ -77,10 +77,11 @@ Read once at service start from `UC_WINDOWS_FILE` (default `data/windows.json`).
 | `max_sessions` | 4 | live sessions (each is a page, a thread and a Playwright driver) |
 | `max_concurrent_sends` | 1 | G5: the account's limit, not a technical one |
 | `session_idle_s` | 1800 | an idle session older than this is closed; its map entry stays |
+| `folder`, `folder_url` | unset | optional Grok project restriction; the deployed Grok adapter requires the existing `NSFW` project's name and canonical URL. Verify identity and membership rather than silently using the account home |
 
-The example is a proposed deployment, not permission to open existing `event_tool` profiles. Tasks 0–5 were verified only with fresh profiles in the independent checkout. Live profile placement is an owner decision before task 6. With no config file, the service defines one `default` Chromium/extension window on the current working directory's `CHROMIUM_EXT` profile and no sites. An explicitly named missing config is an error.
+The example is not permission to open arbitrary existing profiles. Tasks 0–5 used fresh profiles. For the authorized Grok migration the service config lives at `~/.config/universal-controller/windows.json` and keeps the existing signed-in profile at `/home/rabbit/event_tool/data/.grok/.uc_chromium_profile`. Stop its old owner before launch. Do not supply a stale `state_file` over the current account cookies. Native Chrome and port 9222 are not part of this migration.
 
-`sites` is retained in parsed configuration but not served yet. The planned session map is `UC_SESSIONS_FILE` (default `data/sessions.json`).
+Only `grok` is currently a supported configured site. Persistent named-session URLs and last-use times live in `UC_SESSIONS_FILE` (default `data/sessions.json`); the deployed unit selects `~/.local/state/universal-controller/sessions.json`. No messages or cookies are stored in this map.
 
 ## 3. Wire contract (v0)
 
@@ -90,7 +91,7 @@ HTTP on the status server's port (`UC_STATUS_PORT`, default 4010). JSON in, JSON
 
 | Method and path | Body | Returns | Errors |
 |---|---|---|---|
-| `GET /windows` | — | `{name: {browser, engine, running, offers, cdp, queue_timeout_s, clients: n, pages: [{target_id, url, holder, age_s}]}}`. `offers` lists what this window supports, from `attach`, `control`, `fetch`, `cookies`, `snapshot`, `mhtml`. `cdp` is `ws://127.0.0.1:<port>/devtools/browser/<id>`, or `null` if not launched or if the browser serves none. `holder` is a client id or `null`; `session:<site>/<id>` is reserved for task 6 | — |
+| `GET /windows` | — | `{name: {browser, engine, running, offers, cdp, queue_timeout_s, clients: n, pages: [{target_id, url, holder, age_s}]}}`. `offers` lists `attach`, `control`, `fetch`, `cookies`, `snapshot`, `mhtml` as supported. `cdp` is the browser websocket endpoint or `null`. `holder` is a client id, `session:<site>/<id>` for site pages, or `null` | — |
 | `POST /windows/{w}/start` | — | the window's entry, launched if it was not | 404 `no_such_window`; 409 `profile_held` (a browser the service did not launch holds the profile); 500 `launch_failed` |
 | `POST /clients` | `{pid, label, window}` | `{client_id}` | 400 `bad_pid`; 404 `no_such_window` |
 | `DELETE /clients/{id}` | — | `{closed: n}` — closes every page leased to the client (E9) | 404 `no_such_client` |
@@ -112,8 +113,8 @@ HTTP on the status server's port (`UC_STATUS_PORT`, default 4010). JSON in, JSON
 
 | Method and path | Body | Returns | Errors |
 |---|---|---|---|
-| `POST /sites/{site}/{op}` | the operation's keyword arguments, plus `session_id` (default `"default"`), and for `send`: `stream` (bool), `wait` (bool, default true) | `{result}`; with `stream: true`, newline-delimited JSON: `{"delta": "<text>"}` lines, then one `{"result": {...}}` or `{"error": ...}` line (G7) | 404 `no_such_site` / `no_such_op`; 401 `auth_required` (G9); 503 `busy`; 504 `timeout`, with any text that had rendered in `detail` |
-| `GET /sites/{site}/sessions` | — | `{session_id: {url, live, idle_s}}` | 404 `no_such_site` |
+| `POST /sites/{site}/{op}` | operation keyword arguments plus `session_id` (default `"default"`), optional `ephemeral` (default false), `stream` (bool) and `wait` (queue admission, default true) | `{result}`; with `stream: true`, newline-delimited JSON: `{"delta": "<text>"}` then one `{"result": {...}}` or error line (G7) | 404 `no_such_site` / `no_such_op`; 401 `auth_required` (G9); `folder_mismatch` / `page_deviation` for failed project/page expectations; 503 `busy`; 504 `timeout` |
+| `GET /sites/{site}/sessions` | — | `{session_id: {url, live, idle_s, ephemeral?}}`; only live temporary sessions carry `ephemeral: true` | 404 `no_such_site` |
 | `DELETE /sites/{site}/sessions/{id}` | — | `{forgotten: true}` — drops the map entry and closes the page | 404 `no_such_session` |
 
 Rules:
@@ -124,7 +125,7 @@ Rules:
 4. **Pages are created blank unless the caller passes `url`.** A caller with an attachment navigates its own page; that is not the service's business.
 5. **`stop` never queues behind a send.** It runs on a control worker against the session's page (G6; row 18).
 6. **The contract is versioned by path only when it breaks.** v0 has no prefix.
-7. **No browser attachment is required.** Fetch, cookies and snapshot **of an existing target** need no client registration. Creating a leased page requires `client_id`; registration is plain HTTP with the caller's pid/label/window, so an HTTP-only caller can register, create and snapshot without a browser library. Future sessions likewise must not require registration or attachment.
+7. **No browser attachment is required.** Fetch, cookies and snapshot **of an existing target** need no client registration. Creating a leased page requires `client_id`; registration is plain HTTP with the caller's pid/label/window. Site operations create service-held session pages without client registration or attachment.
 8. Worker admission uses the window's `queue_timeout_s` (default 30 s); a full/expired queue returns 503 `busy`. This is separate from operation duration. Browser shutdown fails queued work with 503 `window_stopped`. Bad request schemas/signatures return 400 `bad_arguments`.
 
 Existing routes (`/`, `/availability`, `/probe/{name}`, `/healthz`, `/mcp`) are unchanged.
@@ -132,6 +133,18 @@ Existing routes (`/`, `/availability`, `/probe/{name}`, `/healthz`, `/mcp`) are 
 **Fetch identity and redirects.** Cookie inclusion is explicit, but does not bypass SameSite, CORS or the page's referrer policy. Before Fetch, the service rejects an explicit `from` whose origin differs from the loaded document (for example after a cross-origin redirect), surfacing `origin_unreachable`. Chromium otherwise accepts that input and can substitute its own referrer; the guard prevents silent origin changes. A closed/restarted fetch page is recreated; a page moved off its landed origin is re-established under the same exclusive lock.
 
 **Client read budgets.** `ServiceClient.control_timeout` and `control(..., timeout=...)` are optional **whole-operation** budgets in seconds. For finite budgets, the helper discovers the current `queue_timeout_s` and uses `queue + operation budget + 5 s` as its HTTP read timeout. Default `None` stays unbounded, including `UCBrowser` calls: a page evaluate or repeated locator actions has no universal wall-clock bound. In particular, `chat(timeout_s)` bounds only response polling, not setup or the entire control. A read timeout does not cancel server work; do not retry a send blindly.
+
+**Site lifetime and expectations.** `wait` governs admission, not whether the adapter waits for a reply (`wait_for_response`). Named sessions retain their conversation URL after idle eviction and service restart. `ephemeral: true` marks a temporary session whose URL is never persisted and is discarded on eviction; it is not inferred from a naming convention. A waited-for stateless consumer explicitly forgets its session afterward. A blind send leaves its page alive until idle eviction instead of assuming generation survives tab closure. Reusing an id with conflicting persistent/ephemeral lifetime is an error.
+
+The Grok adapter owns the expectation: the configured project and an enabled composer for a send. Missing expected state is a deviation; login affordances can diagnose `auth_required`, otherwise `page_deviation`. No generic engine login-wall predicate or phrase list decides this. Project-restricted reads/mutations reject conversations outside that project, and cleanup never ranges across the account.
+
+The live Grok project renders conversation cards without anchors. Membership comes from authenticated `GET /rest/app-chat/conversations?pageSize=60&workspaceId=…`, following `nextPageToken` with `pageToken`. Every row must carry the configured `workspaceId`; malformed pages, repeated tokens and foreign rows fail rather than returning a partial or account-wide list. `GET /rest/workspaces/{id}` verifies both id and configured name before driving the page. Send continuations, reads, regeneration and destructive operations refresh membership; listing and cleanup never enumerate the account. New chats were observed at `/project/{id}?chat={conversation_id}`. A canonical `/c/` result is accepted only after backend membership verification, without navigating away from a potentially still-generating blind send.
+
+Additional lifecycle errors: 409 `session_conflict` / `session_closed` / `cancelled`; 503 `session_lost` / `session_unavailable`; 500 `site_failed` / `session_store_failed`. A map-write failure can follow a completed operation and must not cause a retry. A closing worker retains its capacity slot until it really exits. Disconnect cancels queued work, never an operation already inside the adapter; stream cleanup also runs when disconnect precedes the first body yield.
+
+**Thin Grok consumers.** The provider takes `service_url` (or an injected `ServiceClient`); deployed `uc_handler` obtains that explicit address from consumer configuration `UC_GROK_SERVICE_URL`. MCP registration takes `service_url` or the same consumer setting. Neither falls back to a local Grok browser. The proxy and MCP tools share named sessions through the service, not through a process singleton. Generic models remain separate in-process adapters until task 8.
+
+The local generic health store cannot gate the service's Grok identity; the Grok adapter diagnoses that window directly. Production `grok-proxy.config.yaml` sets router `num_retries: 0` and `max_fallbacks: 0`: a timeout may follow an accepted prompt, so the proxy must not automatically replay it. Callers must likewise treat uncertain delivery as uncertain, not as permission to resend.
 
 ## 4. `UCBrowser` in service mode
 
@@ -190,9 +203,9 @@ The native proof is the exact random browser path announced by the launched chil
 
 Blank/non-http extension pages are not injected or waited on by the preparation step: the control's existing absent-engine behavior runs once. Injection errors return `control_failed`, not `no_controls`.
 
-**Sessions (task 6, not implemented).** A future `Session` will be created on first use of `(site, session_id)`, owning its page/attachment and serialized operations. Cap/LRU eviction, concurrent-send limits, idle sweep, persisted conversation map and `/sites` routes remain required before consumer migration.
+**Sessions.** One thread-affine attachment and leased page per active `(site, session_id)`, with serialized operations, a bounded live-session cap, idle/LRU eviction that skips busy sessions, and a shared account send cap (default one). Named conversation mappings survive page eviction and service restart; ephemeral mappings do not. `stop` targets the active page through an independent control worker, not the send queue. Reconnection never automatically resends an uncertain prompt.
 
-**Long operations (E8).** `chat`, `scroll_feed` and fetch use the separate long lane, so short controls are not queued behind their waits. Sessions will be a distinct task-6 facility.
+**Long operations (E8).** `chat`, `scroll_feed` and fetch use the separate long lane, so short controls are not queued behind their waits. Site sends instead use their dedicated bounded session workers.
 
 **Leases and the reaper.** `clients: {client_id: (pid, start_time, label, window)}`, `leases: {(window, target_id): holder}`. Every 5 s, reap exited/reused pids and closed targets. On CDP windows, the owner enumerates page targets using browser-level `Target.getTargets` and closes them with `Target.closeTarget`, regardless of whether its Playwright context knows the Page. Non-page targets are excluded. Firefox/WebKit retain owner-thread Page enumeration/closure. The reaper uses fresh owner inventory, never `Window.info()`'s cached timeout/error fallback; failed enumeration preserves leases for a later pass. Cleanup jobs use `launch=False` so they cannot relaunch a stopped window. With zero registered clients, close unheld raw pages, preserving one blank page and service-owned fetch pages. Fetch pages display `holder: null` but are exempt from the raw-page sweep. Creation and lease assignment are atomic against revocation.
 
@@ -226,25 +239,9 @@ UC_WINDOWS_FILE=data/windows.json pixi run python -m uc_browser.status_server
 
 Health scheduling is **off by default**, both in the module entrypoint and `create_app()`. The command above and the unit below do not automatically open health-probe browsers. To opt in explicitly, append `--run-scheduler` (library equivalent: `create_app(run_scheduler=True)`). It may open registered chat sites in headed windows; manual `POST /probe/{name}` and MCP probes remain available without it. `UC_AUTO_BOOTSTRAP=0` and an empty sites file do not remove the built-in registry seeds and are not scheduler controls.
 
-As a Linux user service (example for `smallblackbox`; the checkout path is a proposal; `not implemented`):
+Linux user-unit templates are versioned in `systemd/uc-service.service` and `systemd/uc-grok-proxy.service`. Install them in `~/.config/systemd/user/` after stopping the previous profile owner; run `systemctl --user daemon-reload`, then enable/start them. Setup §6 records the profile handoff and private config/state paths.
 
-```ini
-[Unit]
-Description=Universal Controller service: browser windows, CDP, control API (127.0.0.1:4010)
-After=graphical-session.target
-
-[Service]
-WorkingDirectory=/home/rabbit/universal_controller
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/rabbit/.Xauthority
-Environment=UC_WINDOWS_FILE=/home/rabbit/universal_controller/data/windows.json
-ExecStart=/home/rabbit/.pixi/bin/pixi run --frozen python -m uc_browser.status_server
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-```
+Both run from the independent checkout and pixi environment. The UC unit owns the headed browser and binds 4010; the Grok-only proxy binds 4000 and uses `grok-proxy.config.yaml`, with `UC_GROK_SERVICE_URL=http://127.0.0.1:4010`. Proxy restart must not close the service browser. UC restart closes its process group; the profile retains sign-in and the URL map reconstructs named sessions lazily. The proxy has a `Wants`/ordering dependency, not a stop-propagating dependency on UC.
 
 Before first start on a host that has run the old arrangement, make sure no browser from it still holds a served profile; the service will refuse with `profile_held` if one does.
 
@@ -277,17 +274,17 @@ One at a time. Each has an observable check; do not start the next until it pass
 
 | Step | Change | Covers | Check |
 |---|---|---|---|
-| 0 | Stop any browser left over from the old arrangement | — | nothing listens on 9222; no Chromium holds a profile named in the config |
+| 0 | Stop the previous owner of each profile actually being migrated | — | no foreign process holds that profile; unrelated native Chrome and port 9222 remain untouched |
 | 1 | Service up with `harvest` only; no consumer changed | — | `GET /windows` lists `harvest` with a `cdp` endpoint; `scripts/service_probe.py` passes |
-| 2 | `event_tool`'s MCP service (the process that runs harvests) passes `service=<url>, window="harvest"` explicitly; it stops opening a `UCBrowser` for a group that holds only feed and API sources | E0–E6, E8, E9, E11, E12, E14 | a harvest logs no `Loading UC extension` line of its own; `Web sources: N messages from 50 sources` stays in the range of the last runs before the change (912–995 over 2026-11-18…23); after it, `GET /windows` shows `harvest` with no leased pages; a harvest restricted to the eight feed sources registers no client at all |
+| 2 | `event_tool`'s MCP service passes `service=<url>, window="harvest"` explicitly for browser sources; feed/API-only groups open no browser | E0–E6, E8, E9, E11, E12, E14 | compare per-source success/deviation/failure states with the pre-change run, not aggregate message totals; no consumer-owned extension launch; no leased pages remain afterward; feed-only runs register no client |
 | 3 | `event_tool`'s job runner labels its `UCBrowser`s with the job id and calls `DELETE /clients?label=<job id>` when a job fails, times out or is cancelled | E10 | force a timeout on a test job: its pages are gone from `GET /windows` within the reaper interval |
 | 4 | `native` window with `engine: inject`; `event_tool` routes standard sources to `harvest` and native or retry work to `native`; plain HTTP never opens a browser; Grok future site routes are unchanged. Native sources, Cloudflare retries and native explore sessions use it | E7, E11 | a harvest logs no `Launching native Chrome` line of its own; the four native sources still return messages; nothing listens on 9222 |
-| 5 | Sessions and site routes; the grok adapter in-service on `grok`; the litellm provider and the Grok MCP tools call it | G1–G13 | the proxy's one-word test chat returns the word; `grok_list_conversations` through the MCP gateway returns the signed-in account's chats; a `stop` issued during a long reply returns while the send is still waiting |
+| 5 | Sessions and site routes; Grok adapter in-service on `grok`; provider and Grok MCP tools call it | G1–G13 | one-word proxy test reaches the verified NSFW project; both consumers share the service session map; project-scoped listing never returns unrelated account chats; independent stop remains callable during a send; proxy restart preserves the window and UC restart cleans up its old browser |
 | 6 | `event_tool`'s export script calls `POST /windows/grok/fetch` instead of opening a browser; its and the proxy's separate Grok profiles are removed | G14 | the export runs while the proxy answers a chat, and the script's only import from `uc_browser` is `ServiceClient` |
 | 7 | Cookie import; `event_tool`'s `web login` opens a tab in `harvest` instead of launching Chrome; `event_tool` drops its direct `playwright-stealth` dependency and its one direct `playwright` import | E13, G15 | `grep -rn 'from playwright' src` in `event_tool` prints nothing |
 | 8 | Health probes and the generic client become sessions; provider pinned executors removed | G10 | `grep -rn 'UCBrowser(' uc_browser` shows only the window manager and the client library |
 
-Rollback at any step is the consumer omitting `service` (constraint 4).
+Browser-consumer rollback omits `service` (constraint 4). Grok thin consumers have no in-process fallback: rollback requires stopping the new owner, restoring the previous proxy unit/client revision, and letting only that owner open the preserved profile.
 
 ## Verification
 

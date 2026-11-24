@@ -1,8 +1,8 @@
 # System Overview
 
 **Status**: CURRENT — the single trusted map
-**Date**: 2026-11-23 (service substrate reconciled; older subsystem descriptions retain their historical scope)
-**Applies to**: the repo as built, including the independent local service through handoff task 5
+**Date**: 2026-11-24 (Grok service migration; generic/health browser ownership remains separate)
+**Applies to**: the independent local service, its Grok adapter and thin consumers
 **Depends on**: `docs/01 - Design/00 - Chat-Window-to-API Design.md`, `docs/02 - Implementation/01 - UC Service — Build Spec.md`
 
 ## Executive summary
@@ -11,30 +11,20 @@ UC turns any web chat UI into a callable API: a site-agnostic JS engine detects 
 
 ## 1. Architecture
 
-```
-                 OpenAI-shaped client / litellm.completion
-                                  │
-        ┌─────────────────────────┼──────────────────────────┐
-        │ litellm proxy (:4000)   │      GET /uc/availability │──► pass-through
-        └─────────────────────────┼──────────────────────────┘        │
-                                  ▼                                   ▼
-   ┌───────────────── uc_browser/llm_providers/uc.py ────┐   ┌─ status_server (:4010) ─┐
-   │  availability gate ── uc/grok ──► sites/grok_fast   │   │  uptime page  /availability │
-   │  (health latest.json) uc/<site> ► sites/generic     │   │  /mcp: site tools           │
-   │  [pinned thread A]        [pinned thread B]         │   └──────────┬──────────────┘
-   └───────────┬─────────────────────┬───────────────────┘              │ probes
-               ▼                     ▼                                  ▼
-   ┌──────────────── uc_browser/browser.py  UCBrowser ─────┐   ┌─ health.py ──► data/health/ ─┐
-   │  launches Chromium + extension, CDP connect            │   │  reach/detect/send levels     │
-   └───────────────────────────┬───────────────────────────┘   └─ registry.py ─► data/sites.json┘
-                               ▼
-   ┌──────────── Chromium + extension/dist/uc-extension.js ────────────┐
-   │   src/ engine (detection, actions, iframe RPC, llm verification)   │
-   │   ml/ runtime + models/dom_classifier (fallback classification)    │
-   └───────────────────────────────────────────────────────────────────┘
-                               ▲
-        bench/ ── MHTML fixtures + truth oracles ── injects same bundle,
-                  scores honest top-1, gates regressions vs baseline.json
+```mermaid
+flowchart LR
+    API[OpenAI client] --> Proxy[Grok-only LiteLLM proxy :4000]
+    Proxy --> HTTP[ServiceClient]
+    MCP[Grok MCP tools] --> HTTP
+    HTTP --> Sites[UC service :4010 /sites/grok]
+    Sites --> Sessions[Bounded session workers]
+    Sessions --> Map[Persisted conversation URL map]
+    Sessions --> Adapter[Grok project adapter]
+    Adapter --> Browser[Signed-in service-owned Chromium]
+    Owner[Window owner thread] --> Browser
+    Browser --> Engine[UC extension engine]
+    Generic[Optional generic provider] --> Local[In-process UCBrowser]
+    Health[Opt-in health scheduler] --> Probe[Separate probe browser]
 ```
 
 ## 2. JS engine (`src/`)
@@ -81,7 +71,7 @@ With `UCBrowser(service=url, window=name)` (caller names both; no environment fa
 
 - **Domain**: one loopback uvicorn process presenting registry × health and owning configured browser windows.
 - **Inputs**: registry/health store, opt-in `--run-scheduler` (or `create_app(run_scheduler=True)`), `UC_WINDOWS_FILE` (default `data/windows.json`). Both service entrypoints default to no automatic probes; manual probe routes remain available.
-- **Outputs**: existing status/availability/probe/MCP routes plus `/windows`, `/clients`, pages, controls, cookies, fetch and snapshots. Site-session routes are not implemented.
+- **Outputs**: status/availability/probe/MCP routes, `/windows`, `/clients`, pages, controls, cookies, fetch, snapshots, and Grok `/sites/{site}` operations/session lifecycle.
 - **Constraints**: `127.0.0.1:4010` (`UC_STATUS_PORT` overrides); the litellm proxy pass-through depends on it. Native Chrome and Chromium each use their own profile and loopback CDP port. Native uses an explicitly selected port with launched-process endpoint proof; Playwright Chromium keeps browser-selected port 0 and its existing stealth setup.
 
 ### Service substrate (`uc_browser/service/`)
@@ -93,20 +83,22 @@ With `UCBrowser(service=url, window=name)` (caller names both; no environment fa
 | `leases.py` | pid/start-time client identities, page leases, label revocation, dead-client reaping and raw-page sweep using fresh authoritative inventory, never cached status; cleanup cannot launch a stopped window |
 | `operations.py`, `api.py` | JSON/NDJSON HTTP operations; retained service-owned fetch page per origin, serialized requests with explicit credentials and per-request referrer (no same-origin re-navigation); cookies and HTML/PNG/MHTML |
 | `client.py`, `targets.py` | browser-independent HTTP client; finite control read budgets include discovered queue allowance and margin, default unbounded; separately loaded CDP target resolver for `UCBrowser` |
+| `sessions.py`, `site_api.py` | bounded thread-affine site sessions, persistent conversation URL map, idle/LRU eviction, account send cap, independent stop and NDJSON streaming |
+| `sites/grok_service.py` | borrowed-page Grok operations, project boundary, expected-page/deviation diagnostics; never owns a browser launch |
 
 The owner closes leased pages independently of a blocked client. Measured revocation: `wait_for_timeout(600000)` failed with `TargetClosedError` in 0.04 s. Service-owned fetch pages survive the zero-client sweep. Each active window can use up to one owner plus two lanes of `control_workers` drivers.
 
 CDP lease maintenance uses `Target.getTargets`/`Target.closeTarget`, including raw pages created in another browser context. Firefox/WebKit keep their owner-Page path. Enumeration failure does not discard ownership records. The focused lease/core/fetch checks passed 65 tests, including real Chromium revocation of a blocked client with owner Page lookup disabled; the sweep preserved internal fetch pages and one blank page.
 
-Site adapters, provider pinned threads, health-probe ownership and Grok MCP hosting remain unchanged pending tasks 6–8. No live deployment or profile migration has occurred. Firefox/WebKit owner-thread operation paths exist but were not live-tested; Chromium and installed Chrome were.
+Grok provider and MCP callers are HTTP-only; the service owns their browser and shared sessions. Generic clients and opt-in health probes retain their separate browser ownership pending task 8. The deployment preserves the existing signed-in Grok profile in place rather than copying stale cookie state. Firefox/WebKit and Windows runtime remain outside the verified deployment.
 
 ## 8. litellm provider (`uc_browser/llm_providers/uc.py`)
 
 - **Domain**: the API surface — `model="uc/<site>"` in any litellm-speaking client.
-- **Inputs**: chat completions requests; `extra_body` for `session_id` / `conversation_url` / `wait_for_response` / `ignore_availability`; `data/health/latest.json` for the gate.
-- **Outputs**: `ModelResponse` with the extracted reply; `_hidden_params.uc_conversation_url` for continuity. No streaming; token counts are length estimates.
-- **Structure**: two routes — `uc/grok` → the adapter (`grok_fast.send_with_fallback`, session store mapping ids to conversation URLs); `uc/<site>` → `GenericClient` for any registry entry advertising `litellm_model == "uc/<site>"`. Availability gate fails fast with `ServiceUnavailableError` on `down`/`login`. **Dual pinned browser threads**: the adapter and the generic client each own a single-worker executor (`uc-grok-pw`, `uc-generic-pw`) because only one sync Playwright instance can ever start per thread and callers may carry litellm's leftover asyncio loop.
-- **Constraints**: proxy must run with one worker; single-writer profile.
+- **Inputs**: chat completions requests; `extra_body` for `session_id` / `conversation_url` / `wait_for_response` / `ignore_availability`. Local `data/health/latest.json` gates only local generic routes, never the service's separately owned Grok identity.
+- **Outputs**: `ModelResponse` with the extracted reply and `_hidden_params.uc_conversation_url`; sync/async streaming relays service deltas and reconciles the final result. Token counts remain estimates.
+- **Structure**: `uc/grok` calls `ServiceClient.site("grok", ...)`, with persistent named sessions owned by the service. Stateless calls use ephemeral sessions; blind sends keep their page until service idle eviction. `uc/<site>` generic routes still use `GenericClient` and its own `uc-generic-pw` executor. No Grok pinned browser thread or consumer-local Grok map remains.
+- **Constraints**: Grok consumers require an explicit service address (`UC_GROK_SERVICE_URL` in deployed consumer configuration); no local fallback. The deployed Grok-only configuration preserves the two public model aliases and leaves generic local models out.
 
 ## 9. Bench (`bench/`)
 

@@ -1,6 +1,6 @@
 # UC as a Local Service — one owner for every browser identity; every access technique offered on it, none required
 
-**Status**: DRAFT for the full migration; handoff tasks 0–5 are implemented and verified in the independent checkout. Sessions, adapter/provider/MCP migration, consumer moves and systemd deployment are not implemented; the lifecycle tables remain the migration requirements
+**Status**: CURRENT for handoff tasks 0–5; the authorized Grok session/provider/MCP and user-unit migration is in progress. Generic/health and non-Grok consumer moves remain future work. The lifecycle tables retain the full migration requirements; the status report records observed deployment evidence.
 **Date**: 2026-11-23
 **Applies to**: `uc_browser/browser.py`, `uc_browser/status_server.py`, `uc_browser/sites/`, `uc_browser/health.py`, `uc_browser/llm_providers/uc.py`, `uc_browser/mcp/`; consumers, chiefly `event_tool`
 **Depends on**: `docs/00 - Theory/00 - Windows, Transport and Control.md` (the model), `docs/08 - Analysis/00 - Service Prototype Measurements.md` (the evidence; "row N" refers to its §3), `docs/03 - Architecture/00 - System Overview.md` (what exists)
@@ -163,7 +163,7 @@ Each row is something a consumer does over time, what happens today, and the pat
 | G6 | Stop generation | waits for the lock held by the send it is meant to stop | acts on the busy page through a different attachment (row 18) |
 | G7 | Streaming: `on_delta` feeds a queue the provider drains | in-process callback | the send route streams: one line per delta, then the result (§7) |
 | G8 | List, read, delete, rename, archive, regenerate, model picker; `cleanup_threads`; delete-after-capture | run on the default session's tab under the same lock | adapter operations on the default session's attachment, concurrent with other sessions' sends |
-| G9 | Signed out | `has_login_wall` raises `GrokAuthRequired`; but Grok's signed-out page ("Sign up to continue") is not recognised and the send hangs (observed 2026-11-17) | the service returns a distinct `auth_required` error and marks the window signed-out; cookie import (§8) clears it. **The detection gap is a code fix this design does not supply** |
+| G9 | The programmed Grok page differs from the adapter's expectation | `has_login_wall` reads a `blocking` field the engine never emits, so its generic predicate is dead | the Grok adapter expects its configured project and an enabled composer before sending. It diagnoses an expectation failure as `auth_required` when login controls establish that, otherwise `page_deviation`. This is site-client logic, not a generic engine/service detector; cookie import can restore the session, and the next operation checks again |
 | G10 | Availability gate reads health data written by probes | probes run in the health monitor's own browser and profile, and its scheduler skips sites marked `login_required` | a probe is a short-lived session in the site's own window, so a signed-in site can be probed and the probe sees what a send would see |
 | G11 | The caller gives up (`event_tool`'s litellm config sets a 180 s per-model timeout; the browser wait floor is 300 s) | the send runs on, holding the lock | the send runs on, holding only its session. The caller may issue stop (G6) |
 | G12 | MCP `chat`, `grok_*`, `list_chat_sessions`, `forget_chat_session` | operate on the hosting process's own browser and session map | thin clients of the same service routes the provider uses: one browser, one map |
@@ -189,7 +189,7 @@ Each row is something a consumer does over time, what happens today, and the pat
                                                      launched and closed by the service only
 ```
 
-**Attach.** Each Chromium-family window serves CDP on a loopback port the browser chooses. The service reads the endpoint and lists it. A caller attaches with any CDP client; UC's own client library uses Playwright's `connect_over_cdp`.
+**Attach.** Each Chromium-family window serves CDP on loopback. Playwright Chromium selects its port; installed native Chrome receives an explicit dynamically selected port to preserve `navigator.webdriver=false`, with launched-process endpoint proof before attachment (Build Spec §5). The service lists the endpoint. A caller attaches with any CDP client; UC's own client library uses Playwright's `connect_over_cdp`.
 
 **The HTTP offers.** A small API in the service. Control is one generic route — window, target id, control name, arguments — dispatching to the existing `UCBrowser` methods (rows 4–5: four different controls through one route, no per-control code, 0.03–0.08 s each). Fetch, cookies, snapshot and session operations have the same shape: name the window or site, pass arguments, get JSON.
 
@@ -231,7 +231,7 @@ Constraint 1 and Theory §1.5 fix the shape. The unit is *(thread, Playwright in
 - Transport is unaffected by any of it: it travels on the client's own connection.
 - Each worker costs one Playwright driver, about 80 MB (row 24). Pools are bounded by config; a request beyond the bound waits.
 
-The provider's two pinned threads exist to give two browser owners a thread each. With the service as sole owner they have no remaining purpose.
+The provider's Grok pinned thread has no purpose once Grok uses site HTTP operations. The generic client's pinned thread remains until its separate task-8 migration; it must not be silently redirected by this Grok cutover.
 
 ## 7. Sites: adapters, sessions and streaming
 
@@ -244,6 +244,10 @@ The grok adapter and the generic client stop constructing `UCBrowser`. They run 
 **Streaming.** A send may ask for a stream. The response is then newline-delimited JSON: a line per delta as the reply renders, and a final line with the result (G7). Without it, the route answers once with the result.
 
 **Errors with meaning.** `auth_required` (G9), `busy` when the site's concurrent-send limit is reached and the caller asked not to wait, `timeout` with whatever text had rendered. The provider maps these to the litellm exceptions it raises today.
+
+**Account folder boundary.** A configured Grok folder/project is an explicit part of that adapter's program. New conversations originate there; subsequent operations preserve and verify their project/conversation identity. The deployment uses `NSFW`. A caller-supplied conversation outside the configured project must fail closed, not move or modify it. Bulk cleanup is project-scoped, never account-wide. Folder placement organizes the account; it is not a separate login or security principal.
+
+**Client configuration.** Provider and Grok MCP consumers pass their configured service address to `ServiceClient`; deployment uses `UC_GROK_SERVICE_URL`. Missing configuration is an error, never permission to launch a fallback browser. A named `session_id` belongs to the service map and survives consumer restarts. Stateless provider calls use disposable service sessions so independent prompts cannot silently continue one shared default conversation.
 
 **What becomes a thin client:**
 
@@ -299,7 +303,7 @@ The pin belongs to UC: the service's Playwright version determines the Chromium 
 
 ## 11. Failure modes to design for
 
-1. **UC itself restarts.** Its browsers go with it, so every client's pages die mid-use. Sign-ins survive in profiles; future sessions will rebuild from the map (G3). HTTP connection failures surface as `UCServiceGone`; raw page operations retain Playwright's target-closed errors.
+1. **UC itself restarts.** Its browsers go with it, so every client's pages die mid-use. Sign-ins survive in profiles; named site sessions rebuild lazily from the persisted URL map (G3). Ephemeral sessions do not survive. HTTP connection failures surface as `UCServiceGone`; raw page operations retain Playwright's target-closed errors. An interrupted send is never replayed automatically.
 2. **A window's browser crashes.** The service relaunches that window; other windows are untouched; that window's leases and sessions are void.
 3. **A consumer bypasses the service** and launches on a served profile (constraint 4). There is no implicit service default: a consumer that wants the service passes `service` and `window`, and the in-process launch path still refuses a profile the service lists (held-profile guard retained).
 4. **A browser the service did not launch already holds a profile**, as the four-day-old Chrome did (Analysis §5). The service must detect a held profile at launch and refuse loudly, not attach to whatever answers.

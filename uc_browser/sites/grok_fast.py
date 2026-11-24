@@ -20,9 +20,11 @@ Two halves:
 
 If the REST read fails *after* the submit is confirmed,
 :meth:`_poll_dom_response` reads the assistant block from the DOM rather
-than letting the caller retype the message. Genuine pre-submit failures
-(no editor, setText broke, trigger chain exhausted) still raise
-``RuntimeError`` so ``send_with_fallback`` can drop to ``GrokClient.send``.
+than letting the caller retype the message. Pre-submit failures proven to have
+sent nothing (no editor, setText broke, trigger chain exhausted with no
+delivery signal) raise ``GrokPreSubmitError`` so ``send_with_fallback`` can drop
+to ``GrokClient.send``; a failed chain that nonetheless delivered raises
+``GrokSubmitUncertain`` and is never re-sent.
 """
 
 from __future__ import annotations
@@ -36,6 +38,8 @@ from typing import Optional
 
 from uc_browser.sites.grok import (
     GrokClient,
+    GrokPreSubmitError,
+    GrokSubmitUncertain,
     _SELECTORS,
     _clean_dom_reply,
     _conv_id_from_url,
@@ -48,6 +52,9 @@ _API = "https://grok.com/rest/app-chat/conversations"
 _POLL_MS = 500
 # Consecutive REST failures before giving up on the API read for this send.
 _MAX_API_FAILURES = 5
+# Polls (250 ms apart) for a late delivery signal before a failed submit chain
+# may be treated as "nothing sent".
+_LANDED_POLLS = 6
 
 # In-page fetch: rides the page's cookies, so the session is the user's.
 _FETCH_JS = """async ([url, body]) => {
@@ -571,6 +578,15 @@ class GrokFastClient:
             prev_count = page.evaluate(
                 "(sel) => document.querySelectorAll(sel).length", assistant_sel,
             )
+            # Delivery baseline for the "did a submit land?" check: a submit
+            # whose confirmation failed must never be retyped if it did land.
+            baseline = (
+                page.evaluate(
+                    "(sel) => document.querySelectorAll(sel).length",
+                    _SELECTORS["user_message"],
+                ) or 0,
+                _conv_id_from_url(page.url),
+            )
             # Responses already in this chat, so the REST poll can tell the
             # new reply from old ones. None = unknown: skip the REST read
             # rather than risk returning an earlier reply.
@@ -601,10 +617,10 @@ class GrokFastClient:
                 try:
                     return self._send_toolkit(
                         page, message, assistant_sel, prev_count, timeout_s,
-                        on_delta=on_delta,
+                        on_delta=on_delta, baseline=baseline,
                     )
-                except RuntimeError as e:
-                    # Pre-submit failure ⇒ nothing was sent; safe to fall through
+                except GrokPreSubmitError as e:
+                    # Nothing was submitted (verified); safe to fall through
                     # to the bespoke path (its setText replaces, not appends).
                     logger.warning(
                         "[grok_fast] toolkit path pre-submit failure (%s); "
@@ -621,7 +637,7 @@ class GrokFastClient:
                 ["div.ProseMirror", message],
             ) or {}
             if not typed.get("success"):
-                raise RuntimeError(
+                raise GrokPreSubmitError(
                     f"GrokFastClient: setText failed ({typed.get('error')})"
                 )
             # Settle grok's async paste->file conversion and recover if
@@ -632,10 +648,10 @@ class GrokFastClient:
             # by the composer clearing. Only then is the send real.
             trig = page.evaluate("() => window.__UC_grokTriggerSubmit()") or {}
             if not trig.get("ok"):
-                raise RuntimeError(f"GrokFastClient: trigger failed: {trig}")
+                self._raise_submit_failure(page, baseline, f"trigger failed: {trig}")
 
-            # Sent. From here on never raise RuntimeError: send_with_fallback
-            # would re-type the message (the double-paste).
+            # Sent. From here on never raise GrokPreSubmitError:
+            # send_with_fallback would re-type the message (the double-paste).
             deadline = time.monotonic() + timeout_s
             if known_ids is not None:
                 reply = self._await_api_reply(page, known_ids, deadline)
@@ -672,25 +688,17 @@ class GrokFastClient:
                 break
         logger.info(
             "[grok_fast] post-setText settled: chips=%d (list=%s remove=%s) "
-            "editor_chars=%s labels=%s",
+            "editor_chars=%s",
             info.get("count"), info.get("list_chips"),
             info.get("remove_buttons"), info.get("editor_chars"),
-            [c.get("label") for c in (info.get("chips") or [])][:3],
         )
-        # Text vanished (not in editor, no chip caught) → dump composer markup
-        # so we can find the real file-icon element and build a correct detector.
+        # Text vanished (not in editor, no chip caught). Only counts are
+        # logged: composer markup would carry the account's message text.
         if (info.get("editor_chars") or 0) == 0 and not info.get("count"):
-            dump = page.evaluate(
-                """() => {
-                    const pm = document.querySelector('div.ProseMirror');
-                    const form = pm ? pm.closest('form') : null;
-                    const root = form || (pm ? pm.parentElement : document.body);
-                    if (!root) return null;
-                    const html = (root.outerHTML || '').replace(/\\s+/g, ' ');
-                    return html.slice(0, 2200);
-                }"""
+            logger.warning(
+                "[grok_fast] composer shows neither text nor an attachment "
+                "after setText"
             )
-            logger.warning("[grok_fast] composer dump (text vanished): %s", dump)
         # ── Chip-submit: the DEFAULT for large contexts ────────────────
         # When grok files a large paste into a pasted-text.txt chip, that file
         # carries the FULL payload (verified end-to-end: a 56K probe round-
@@ -781,7 +789,7 @@ class GrokFastClient:
 
     def _send_toolkit(
         self, page, message: str, assistant_sel: str,
-        prev_count: int, timeout_s: int, on_delta=None,
+        prev_count: int, timeout_s: int, on_delta=None, baseline=None,
     ) -> dict:
         """Send + capture using the extension's selectorless toolkit.
 
@@ -801,13 +809,17 @@ class GrokFastClient:
             ["div.ProseMirror", message],
         ) or {}
         if not typed.get("success"):
-            raise RuntimeError(
+            raise GrokPreSubmitError(
                 f"GrokFastClient(toolkit): setText failed ({typed.get('error')})"
             )
         self._handle_chips(page, message)
         trig = page.evaluate("() => window.__UC_grokToolkitSubmit()") or {}
         if not trig.get("ok"):
-            raise RuntimeError(f"GrokFastClient(toolkit): submit failed: {trig}")
+            self._raise_submit_failure(
+                page,
+                baseline if baseline is not None else (0, _conv_id_from_url(page.url)),
+                f"toolkit submit failed: {trig}",
+            )
         logger.info(
             "[grok_fast] toolkit submit ok via %s (reason=%s via=%s)",
             trig.get("method"), trig.get("reason"), trig.get("via"),
@@ -841,6 +853,7 @@ class GrokFastClient:
         emitted = ""  # text already streamed via on_delta (prefix-stripped)
         last_activity = t0  # last poll that saw reply text OR a generating signal
         bailed = False
+        timed_out = False
         while time.monotonic() < deadline:
             page.wait_for_timeout(250)
             state = page.evaluate(
@@ -908,6 +921,8 @@ class GrokFastClient:
                 )
                 bailed = True
                 break
+        else:
+            timed_out = True
 
         resp = _clean_dom_reply(last_text)
         if not resp:
@@ -917,11 +932,14 @@ class GrokFastClient:
                 int(time.monotonic() - t0), bailed, diag,
             )
         final_url = page.url
-        return {
+        out = {
             "response": resp,
             "url": final_url,
             "conversation_id": _conv_id_from_url(final_url),
         }
+        if timed_out:
+            out["timed_out"] = True
+        return out
 
     def _poll_dom_response(
         self, page, assistant_sel: str, prev_count: int, timeout_s: int,
@@ -950,6 +968,7 @@ class GrokFastClient:
         seen_generating = False
         saw_new_block = False
         bailed = False
+        timed_out = False
         while time.monotonic() < deadline:
             page.wait_for_timeout(250)
             state = page.evaluate(
@@ -1011,6 +1030,8 @@ class GrokFastClient:
             else:
                 stable = 0
                 last_text = cur
+        else:
+            timed_out = True
 
         final_url = page.url
         resp = _clean_dom_reply(last_text)
@@ -1023,37 +1044,67 @@ class GrokFastClient:
                 "[grok_fast] empty response after %ds (bailed=%s). diagnostic=%s",
                 int(time.monotonic() - t0), bailed, diag,
             )
-        return {
+        out = {
             "response": resp,
             "url": final_url,
             "conversation_id": _conv_id_from_url(final_url),
         }
+        if timed_out:
+            out["timed_out"] = True
+        return out
+
+    def _submission_landed(self, page, baseline) -> bool:
+        """Did a submit reach Grok? Polls briefly so a slow submit is seen.
+
+        ``baseline`` is ``(user_message_count, conversation_id)`` taken before
+        typing. Growth of the user-message count or a different conversation
+        id means the message is in flight and must not be re-sent.
+        """
+        users_before, conv_before = baseline
+        for _ in range(_LANDED_POLLS):
+            users = page.evaluate(
+                "(sel) => document.querySelectorAll(sel).length",
+                _SELECTORS["user_message"],
+            )
+            conv = _conv_id_from_url(page.url)
+            if (isinstance(users, int) and users > users_before) or (
+                conv and conv != conv_before
+            ):
+                return True
+            page.wait_for_timeout(250)
+        return False
+
+    def _raise_submit_failure(self, page, baseline, what: str) -> None:
+        """Raise the right error for a submit chain that reported failure."""
+        if self._submission_landed(page, baseline):
+            raise GrokSubmitUncertain(
+                f"GrokFastClient: {what}, but the message appears to have been "
+                "delivered; refusing to re-send"
+            )
+        raise GrokPreSubmitError(f"GrokFastClient: {what}")
 
     def _capture_empty_diagnostic(self, page, assistant_sel: str) -> dict:
-        """Snapshot the page when a confirmed-submit produced no reply text.
+        """Structural snapshot when a confirmed submit produced no reply text.
 
-        Distinguishes the empty-render failure modes: a visible refusal /
-        moderation message (``refusal_language`` populated), Grok producing
-        an assistant block we failed to read (``last_assistant_snippet`` set
-        but text empty), or a genuine silent non-response (no blocks, no
-        refusal). Logged so kayla/ceraph-style empties become diagnosable.
+        Distinguishes the empty-render failure modes (a refusal-like message,
+        an assistant block we failed to read, a genuine silent non-response)
+        using counts and flags only. Never returns or logs message text,
+        reply snippets or page excerpts: this runs against a personal account.
         """
         try:
             return page.evaluate(
                 """(asstSel) => {
                     const els = document.querySelectorAll(asstSel);
                     const last = els.length
-                        ? (els[els.length - 1].innerText || '').trim().slice(0, 400)
-                        : null;
+                        ? (els[els.length - 1].innerText || '').trim()
+                        : '';
                     const body = document.body ? (document.body.innerText || '') : '';
                     const re = /(I (can'?t|cannot|won'?t|will not)|not able to|against (our|the|my) (guidelines|policy|principles)|content policy|I'?m sorry|unable to (help|assist|continue)|can'?t (help|assist|continue|generate)|violat|not comfortable|won'?t be able)/i;
-                    const m = body.match(re);
-                    const refusal = m ? body.slice(Math.max(0, m.index - 60), m.index + 200) : null;
                     return {
-                        url: location.href,
+                        path: location.pathname,
                         assistant_blocks: els.length,
-                        last_assistant_snippet: last,
-                        refusal_language: refusal,
+                        last_assistant_chars: last.length,
+                        refusal_language_present: re.test(body),
                         composer_present: !!document.querySelector('div.ProseMirror'),
                         body_chars: body.length,
                     };
@@ -1061,7 +1112,7 @@ class GrokFastClient:
                 assistant_sel,
             ) or {}
         except Exception as e:  # noqa: BLE001
-            return {"diag_error": str(e)}
+            return {"diag_error": type(e).__name__}
 
 
 # ── Top-level orchestrator: fast → DOM fallback ───────────────────
@@ -1127,7 +1178,7 @@ def send_with_fallback(
             timeout_s=timeout_s,
             on_delta=on_delta,
         )
-    except RuntimeError as fast_err:
+    except GrokPreSubmitError as fast_err:
         logger.warning(
             "GrokFastClient.send failed (%s); falling back to GrokClient.send",
             fast_err,

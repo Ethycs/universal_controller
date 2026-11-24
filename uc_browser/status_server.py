@@ -6,6 +6,12 @@ One uvicorn process serving:
                       litellm models are currently callable
   POST /probe/{name}  force an immediate probe of one site
   GET  /healthz       liveness of this server itself
+  *    /windows, /clients  browser windows, leases and controls (uc_browser.service.api)
+  POST /sites/{site}/{op}, GET /sites/{site}/sessions,
+  DELETE /sites/{site}/sessions/{id}
+                      site sessions from the windows config's "sites"
+                      section (uc_browser.service.site_api); the session map
+                      is UC_SESSIONS_FILE (default data/sessions.json)
   *    /mcp           MCP endpoint (streamable-http) exposing the site
                       registry tools: uc_site_add / uc_site_search /
                       uc_site_list / uc_site_probe / uc_availability
@@ -167,7 +173,8 @@ def create_app(registry: Optional[SiteRegistry] = None,
                monitor: Optional[HealthMonitor] = None,
                run_scheduler: bool = False,
                with_mcp: bool = True,
-               window_manager=None):
+               window_manager=None,
+               session_manager=None):
     from fastapi import FastAPI, HTTPException
     from fastapi.responses import HTMLResponse, JSONResponse
     from fastapi.exceptions import RequestValidationError
@@ -175,6 +182,8 @@ def create_app(registry: Optional[SiteRegistry] = None,
     from uc_browser.service.errors import ServiceError
     from uc_browser.service.leases import LeaseStore
     from uc_browser.service.operations import Operations
+    from uc_browser.service.sessions import SessionManager
+    from uc_browser.service.site_api import create_site_router
     from uc_browser.service.windows import WindowManager
 
     registry = registry or get_registry()
@@ -183,6 +192,9 @@ def create_app(registry: Optional[SiteRegistry] = None,
     windows = window_manager if window_manager is not None else WindowManager()
     leases = LeaseStore(windows)
     operations = Operations(windows, leases)
+    # Site sessions come from the windows config's ``sites`` section; an invalid
+    # one (unknown site, missing window, bad number) fails here, not at first use.
+    sessions = session_manager if session_manager is not None else SessionManager(windows, leases)
 
     async def _scheduler():
         while True:
@@ -208,6 +220,7 @@ def create_app(registry: Optional[SiteRegistry] = None,
             if failures:
                 raise next(iter(failures.values()))
             leases.start()
+            sessions.start()
             task = asyncio.create_task(_scheduler()) if run_scheduler else None
             if mcp is not None:
                 # The streamable-http transport needs its session manager
@@ -223,6 +236,9 @@ def create_app(registry: Optional[SiteRegistry] = None,
                     await task
                 except asyncio.CancelledError:
                     pass
+            # Sessions first: they interrupt busy pages and join their workers
+            # while the windows they attach to still exist.
+            await asyncio.to_thread(sessions.close)
             await asyncio.to_thread(leases.close)
             await asyncio.to_thread(windows.close)
 
@@ -233,6 +249,7 @@ def create_app(registry: Optional[SiteRegistry] = None,
     app.state.windows = windows
     app.state.leases = leases
     app.state.operations = operations
+    app.state.sessions = sessions
 
     @app.exception_handler(ServiceError)
     async def service_error(request, exc):
@@ -243,6 +260,7 @@ def create_app(registry: Optional[SiteRegistry] = None,
         return JSONResponse({"error": "bad_arguments", "detail": "request does not match the route schema"}, status_code=400)
 
     app.include_router(create_router(windows, leases, operations))
+    app.include_router(create_site_router(sessions))
 
     @app.get("/", response_class=HTMLResponse)
     async def index():

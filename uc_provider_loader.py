@@ -5,19 +5,18 @@ file paths relative to the config file's directory, not as regular
 Python imports. The real module is at
 ``uc_browser/llm_providers/uc.py``; the proxy's loader can't reach that
 by package path, so we re-export the singleton handler from this file
-(which sits next to ``litellm.config.yaml``).
+(which sits next to the proxy configurations).
 
-Referenced from ``litellm.config.yaml`` as
+Referenced from ``litellm.config.yaml`` and ``grok-proxy.config.yaml`` as
 ``custom_handler: uc_provider_loader.uc_handler``.
 """
 
 import logging as _logging
 import os as _os
 
-# Surface the browser-driver logs (submit-path decisions, anchor capture,
-# empty diagnostics) through the litellm proxy's stdout. litellm doesn't
-# configure third-party loggers, so without this the grok_fast INFO lines
-# that say which path (toolkit vs bespoke) handled a send are invisible.
+# Surface UC client diagnostics through the proxy's stdout. Grok browser
+# execution now logs in the UC service, not this process. The mixed-site
+# configuration can still run generic browser clients here.
 # Opt out with UC_GROK_QUIET=1.
 if _os.environ.get("UC_GROK_QUIET") != "1":
     _uc_log = _logging.getLogger("uc_browser")

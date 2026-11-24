@@ -107,3 +107,30 @@ The owner authorized both fixes after PBX 210-1001 exercised `event_tool`'s nati
 Verification: **81 passed** in `pixi run --frozen -e dev pytest -q tests/test_service_windows_core.py tests/test_health.py`. Tests cover foreign listener refusal, explicit endpoint proof without a file, held profiles, failure cleanup, bounded stderr draining, unchanged Chromium endpoint-file discovery, scheduler default/opt-in and manual probing. The real CLI smoke passed native probe rows 20–22 and S1, explicit `UCBrowser` attachment, release and graceful shutdown. Native Chrome 157.0.8103.78 and unchanged Chromium 159.0.8154.6 both returned `navigator.webdriver=False` on fresh client-created pages with Playwright 1.65.2. No automatic health probes or leftover test browsers/drivers; the throwaway smoke was removed. Conditions and timing are in Analysis 00 §8. Windows and real bot checks were not run.
 
 Historical external verification, kept separate from this focused run: PBX 210-1001 reported **245 passed, 1 skipped** for the full UC suite at `c211ecd`. No whole-suite result is claimed for this follow-up.
+
+## 10. 2026-11-24 authorized Grok/NSFW service migration
+
+The owner explicitly authorized migrating the signed-in Grok window to UC and using the **NSFW** folder after the account merge. The existing project was identified from the profile's history, then verified in the live UI (`NSFW - Grok`, enabled composer) and Grok's workspace metadata. No new account folder was manufactured.
+
+Built:
+- Bounded, thread-affine site sessions, account send cap one, atomic URL-only persistent map, ephemeral stateless sessions, idle/LRU teardown, independent stop and NDJSON streaming.
+- Grok adapter borrows a service page. Project identity/name and conversation membership fail closed; the actual project uses cards, so membership uses its workspace-filtered API rather than nonexistent anchors. Cached membership does not authorize a later continuation after removal.
+- Provider and MCP implementations are HTTP-only Grok clients. Named sessions share the service map; blind ephemeral sends retain their page until eviction. Generic/health browser ownership remains separate. Local health-probe failures no longer gate a different service-owned identity.
+- Versioned `systemd/uc-service.service`, `systemd/uc-grok-proxy.service`, and Grok-only production proxy config. Router retries/fallbacks are disabled because an uncertain send cannot safely be replayed.
+
+Deployment:
+- Stopped the old `uc-grok-proxy` owner before opening its profile. Private closed-profile/unit backup: `~/.local/state/universal-controller/backups/20261124T044452Z/`.
+- Enabled independent user units: UC on loopback 4010; the HTTP-only proxy on loopback 4000, preserving `uc-grok` and `grok-browser`.
+- Profile remains `/home/rabbit/event_tool/data/.grok/.uc_chromium_profile`; no stale state-file cookies are injected. Private windows config is `~/.config/universal-controller/windows.json`; the session map is `~/.local/state/universal-controller/sessions.json`.
+- Native Chrome, its profile, port 9222 and `uc-native-window` were not changed.
+- Gateway MCP consumer pin/environment cutover is being coordinated separately; client implementation tests are not a claim that the running gateway has switched.
+
+Observed verification:
+1. Focused session/adapter/client/provider/Grok/core/fetch/health run: **499 passed, 1 skipped, 1 failed**. The failure was a test race releasing a fake blocked read before it observed closure; removing that premature release retained the error assertion, and the targeted case then passed (**1 passed**).
+2. Live project discovery correction and fresh-membership regressions: **104 passed** in `tests/test_grok_service_adapter.py`.
+3. Throwaway LiteLLM Router proof against a synthetic uncertain-delivery provider: **one invocation**, zero retries and zero fallbacks with the production router settings. No account request in this proof.
+4. One real one-word `Ping` through the proxy's streaming endpoint completed with a nonempty reply. One content chunk was observed; this short reply does not prove multi-chunk live delivery. Grok's actual URL retained the project and chat id; the backend confirmed its `workspaceId` matched NSFW.
+5. Proxy restart preserved both browser PID/CDP endpoint and named session URL.
+6. UC restart removed the previous browser, left the lazy window stopped, and restored the named URL map with `live: false`. A subsequent service read reopened the same signed-in identity, verified project membership, and returned the existing two-message conversation without another prompt. Project listing returned the one test conversation; exactly one process owned the profile.
+
+No prompt/reply text or cookies are included in these logs. Full-suite, Windows, multi-day idle and real long-generation stop/concurrency are not claimed. Independent stop and concurrency were exercised with deterministic blocked-worker tests.

@@ -62,15 +62,26 @@ Background health probes are **off by default**. Opt in with `pixi run python -m
 
 `UC_WINDOWS_FILE` selects a windows config; with no file, the service defines one lazy local Chromium/extension window. Build `extension/dist/uc-extension.js` before starting even lazy extension/inject windows: startup refuses a missing bundle. No live profile or service unit is installed by these commands.
 
-Consumers opt in explicitly with `UCBrowser(service="http://127.0.0.1:4010", window="harvest")`; omitting `service` retains in-process operation. `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` and `UC_CLIENT_LABEL` are no longer read, and `ServiceClient(url)` requires an explicit address. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Site-session endpoints and consumer migration are not implemented yet.
+Consumers opt in explicitly with `UCBrowser(service="http://127.0.0.1:4010", window="harvest")`; omitting `service` retains in-process operation. `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` and `UC_CLIENT_LABEL` are no longer read, and `ServiceClient(url)` requires an explicit address. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Grok uses the site-session routes through its explicitly configured HTTP consumers (§6); this does not migrate harvest, generic or health browsers.
 
-## 6. litellm proxy
+## 6. Grok proxy and service deployment
+
+`systemd/uc-service.service` and `systemd/uc-grok-proxy.service` are Linux user-unit templates for an independent checkout at `~/universal_controller`. The service alone owns the signed-in browser; the Grok-only proxy uses `grok-proxy.config.yaml`, exposing the existing `uc-grok` and `grok-browser` model names on loopback port 4000.
+
+Host-specific configuration belongs in private `~/.config/universal-controller/windows.json`; the session map belongs in `~/.local/state/universal-controller/sessions.json`. Configure a `grok` window and site, with the intended `folder` and verified `folder_url`. The current migration uses the existing `NSFW` project and keeps the Grok profile at its existing path. Do not copy stale state-file cookies over a profile whose account/session has just changed.
+
+Before first cutover, stop the old `uc-grok-proxy` browser owner, confirm its profile is no longer held, and back up the closed profile. Only then start the UC service on that profile. Never run two owners against it. Install the user units, reload systemd, and start the UC service before restarting the proxy. Do not alter the separate native browser/port 9222.
 
 ```bash
-pixi run -e dev litellm --config litellm.config.yaml --port 4000 --num_workers 1
+# By hand, after the service owns the configured Grok profile:
+UC_GROK_SERVICE_URL=http://127.0.0.1:4010 \
+  pixi run --frozen litellm --config grok-proxy.config.yaml \
+  --host 127.0.0.1 --port 4000 --num_workers 1
 ```
 
-`--num_workers 1` is mandatory — the browser profile is single-writer (the config sets `worker_concurrency: 1` as belt-and-braces). The proxy pass-through forwards `GET /uc/availability` → the status server's `/availability`, so run the status server alongside it. Any OpenAI-shaped client then works against `http://localhost:4000/v1` with models `uc-grok`, `uc-chatgpt`, `uc-perplexity`, `uc-pi`, `uc-lmarena`, `uc-grok-generic`.
+`UC_GROK_SERVICE_URL` is consumer configuration, passed explicitly to `ServiceClient`; it does not select a `UCBrowser` mode. The provider and Grok MCP tools fail with a configuration error when it is absent, rather than opening a private browser. MCP hosts must use the same deployed client revision and set this address too. Named sessions are shared through the service; restarting a consumer does not close its browser or discard that map.
+
+The older `litellm.config.yaml` remains a mixed-site development example. Its generic non-Grok clients still own local browsers and require one worker; that task-8 migration is separate. No generic models are added to the production Grok-only proxy by this cutover.
 
 ## 7. Demo pipeline
 
@@ -90,7 +101,7 @@ First sheet needs header columns `Domain | Brand | Notes`. Rows land in the regi
 
 ## Gotchas (validated — each of these cost real debugging time)
 
-1. **Only ONE sync Playwright instance can ever start per thread.** The first instance binds its greenlet to the thread; a second start there dies with "Cannot switch to a different thread". This is why `uc_browser/llm_providers/uc.py` gives the grok adapter and the generic client **each their own pinned single-worker executor thread** (`uc-grok-pw`, `uc-generic-pw`) and hops every browser-touching call onto the right one.
+1. **Only ONE sync Playwright instance can ever start per thread.** Browser objects stay on the thread that created them. Grok's owner and bounded site-session workers are in the UC service; its proxy and MCP tools hold only HTTP clients. The generic provider retains its own `uc-generic-pw` executor until its separate migration.
 2. **`litellm.completion` leaves an asyncio loop on the calling thread** (its async logging machinery), and sync Playwright refuses to run on a thread that has a loop. Any code that calls litellm and then touches the browser must hop to a pinned worker thread — see `demo_pipeline.py:demo_call` for the pattern.
 3. **grok.com hydrates 15–25 s past `networkidle`.** The DOM you see at networkidle is not the DOM you can drive; wait for hydration before detecting or sending.
 4. **MHTML snapshots block page scripts, but CDP-injected JS runs fine.** `page.evaluate` (and bundle injection via CDP) executes normally inside an MHTML fixture — that's the entire trick that lets the bench drive real-site DOMs offline and deterministically.

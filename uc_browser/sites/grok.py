@@ -27,7 +27,7 @@ import threading
 import time
 from contextlib import contextmanager
 from typing import Iterator, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlsplit
 
 from uc_browser import BrowserMode, UCBrowser
 
@@ -115,6 +115,20 @@ class GrokAuthRequired(GrokError):
     """Login wall detected — user needs to run web-login first."""
 
 
+class GrokPreSubmitError(GrokError):
+    """Raised only when it is certain nothing was submitted.
+
+    Callers may safely retry the same message through another path.
+    """
+
+
+class GrokSubmitUncertain(GrokError):
+    """A submit may have reached Grok even though its confirmation failed.
+
+    The message MUST NOT be re-sent; the caller reads the conversation instead.
+    """
+
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -172,6 +186,29 @@ def _normalize_url(url_or_id: str) -> str:
     return f"https://grok.com/c/{url_or_id}"
 
 
+def _row_selector(conv_id: str) -> str:
+    """Anchors that link to ``conv_id``: classic ``/c/<id>`` or project ``?chat=<id>``."""
+    return f'a[href*="/c/{conv_id}"], a[href*="chat={conv_id}"]'
+
+
+# Click the visible, enabled stop-generation control. Shared by the local
+# client and the service adapter (which runs it on a page it does not own).
+_CLICK_STOP_JS = """(sel) => {
+    const shown = (el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return false;
+        const s = getComputedStyle(el);
+        return s.visibility !== 'hidden' && s.display !== 'none';
+    };
+    for (const el of document.querySelectorAll(sel)) {
+        if (!shown(el) || el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+        el.click();
+        return true;
+    }
+    return false;
+}"""
+
+
 # ── GrokClient ───────────────────────────────────────────────────────
 
 
@@ -222,6 +259,33 @@ class GrokClient:
         # RLock instance; no per-session granularity is possible without
         # async Playwright.
         self._page_locks: dict[str, threading.RLock] = {}
+        # Borrowed mode (service sessions): the page and the unstarted
+        # UCBrowser receiver belong to the caller. This client then never
+        # opens, relaunches or closes anything.
+        self._borrowed_page = None
+
+    @classmethod
+    def borrowing(
+        cls,
+        uc,
+        page,
+        *,
+        home_url: Optional[str] = None,
+        timeout_ms: int = 30000,
+    ) -> "GrokClient":
+        """A client that drives one caller-owned ``page`` and never owns a browser.
+
+        ``uc`` supplies page-only controls and must not be started by us.
+        Every ``session_key`` maps to ``page``; ``close()`` releases the
+        references and closes nothing. ``home_url`` replaces ``GROK_HOME`` as
+        the new-chat/sidebar surface (e.g. a project URL).
+        """
+        client = cls(timeout_ms=timeout_ms)
+        client._uc = uc
+        client._borrowed_page = page
+        if home_url:
+            client.GROK_HOME = home_url
+        return client
 
     # ── Lifecycle ────────────────────────────────────────────────────
 
@@ -238,6 +302,8 @@ class GrokClient:
         # down and relaunch instead of returning a corpse that fails on the
         # next new_page() with TargetClosedError. Stale pages belonged to the
         # dead browser, so drop them too.
+        if self._borrowed_page is not None:
+            return self._uc
         if self._uc is not None and not self._uc.is_alive():
             logger.warning(
                 "UCBrowser context is dead (browser closed?); relaunching."
@@ -256,6 +322,11 @@ class GrokClient:
         return self._uc
 
     def close(self) -> None:
+        if self._borrowed_page is not None:
+            with self._lock:
+                self._borrowed_page = None
+                self._uc = None
+            return
         with self._lock:
             pages = list(self._pages.values())
             self._pages.clear()
@@ -282,6 +353,10 @@ class GrokClient:
 
         Caller MUST hold ``self._lock`` (Playwright sync is thread-bound).
         """
+        if self._borrowed_page is not None:
+            if self._borrowed_page.is_closed():
+                raise GrokError("the borrowed Grok page is closed")
+            return self._borrowed_page
         page = self._pages.get(session_key)
         if page is not None and not page.is_closed():
             return page
@@ -335,8 +410,19 @@ class GrokClient:
 
     @staticmethod
     def _same_path(a: str, b: str) -> bool:
-        """True when two grok URLs point at the same place (ignoring ?rid=)."""
-        return a.split("?", 1)[0].rstrip("/") == b.split("?", 1)[0].rstrip("/")
+        """True when two grok URLs point at the same place.
+
+        Host, path and the ``chat`` parameter decide; other query noise such
+        as ``rid`` is ignored. ``/project/<id>?chat=A`` and ``?chat=B`` are
+        different conversations and must never compare equal.
+        """
+
+        def key(url: str) -> tuple[str, str, str]:
+            parts = urlsplit(url)
+            chat = (parse_qs(parts.query).get("chat") or [""])[0]
+            return parts.netloc.lower(), parts.path.rstrip("/"), chat.lower()
+
+        return key(a) == key(b)
 
     def _navigate_in(self, page, url: str, *, wait_ms: int = 1200):
         """Navigate the given (already-locked) page if it isn't there yet."""
@@ -484,6 +570,7 @@ class GrokClient:
             last_text = ""
             stable = 0
             seen_generating = False
+            timed_out = False
             while time.monotonic() < deadline:
                 page.wait_for_timeout(250)
                 state = page.evaluate(
@@ -526,13 +613,18 @@ class GrokClient:
                 else:
                     stable = 0
                     last_text = cur
+            else:
+                timed_out = True
 
             result_url = page.url
-            return {
+            out = {
                 "response": _clean_dom_reply(last_text),
                 "url": result_url,
                 "conversation_id": _conv_id_from_url(result_url),
             }
+            if timed_out:
+                out["timed_out"] = True
+            return out
 
     def read(self, conversation_url: str) -> dict:
         """Return the full transcript: ``{url, conversation_id, messages}``.
@@ -615,7 +707,7 @@ class GrokClient:
         ``mouseenter`` events aren't enough — Playwright's real ``.hover()``
         is required). Returns True if the popover opened.
         """
-        row_loc = page.locator(f'a[href*="/c/{conv_id}"]').first
+        row_loc = page.locator(_row_selector(conv_id)).first
         try:
             if row_loc.count() == 0:
                 logger.warning("Grok: row not found for %s", conv_id)
@@ -696,8 +788,8 @@ class GrokClient:
             page.wait_for_timeout(1200)
             # Verify the row no longer exists in the sidebar.
             gone = page.evaluate(
-                "(id) => !document.querySelector('a[href*=\"/c/' + id + '\"]')",
-                conv_id,
+                "(sel) => !document.querySelector(sel)",
+                _row_selector(conv_id),
             )
             return bool(gone)
 
@@ -767,13 +859,12 @@ class GrokClient:
         with self._open(url, wait_ms=3500) as page:
             # Snapshot the last assistant block's text as the "old"
             old = page.evaluate(
-                """() => {
-                    const els = document.querySelectorAll(
-                        '[data-message-author-role="assistant"]'
-                    );
+                """(sel) => {
+                    const els = document.querySelectorAll(sel);
                     if (!els.length) return '';
                     return (els[els.length - 1].innerText || '').trim();
                 }""",
+                _SELECTORS["assistant_message"],
             )
             # Capture a trigram baseline so __UC_extractFromContainer can score
             uc._wait_ready(page)
@@ -796,37 +887,32 @@ class GrokClient:
             while time.monotonic() < deadline:
                 page.wait_for_timeout(500)
                 cur = page.evaluate(
-                    """() => {
-                        const els = document.querySelectorAll(
-                            '[data-message-author-role="assistant"]'
-                        );
+                    """(sel) => {
+                        const els = document.querySelectorAll(sel);
                         if (!els.length) return '';
                         return (els[els.length - 1].innerText || '').trim();
                     }""",
+                    _SELECTORS["assistant_message"],
                 )
                 if cur and cur != old:
                     if cur == last:
                         stable += 1
                         if stable >= 3:
-                            return {"ok": True, "response": cur}
+                            return {"ok": True, "response": _clean_dom_reply(cur)}
                     else:
                         stable = 0
                         last = cur
-            return {"ok": bool(last), "response": last, "reason": "timeout"}
+            return {
+                "ok": bool(last),
+                "response": _clean_dom_reply(last),
+                "reason": "timeout",
+            }
 
     def stop(self, conversation_url: str) -> bool:
         """Click the stop button if the assistant is currently generating."""
         url = _normalize_url(conversation_url)
         with self._open(url, wait_ms=2000) as page:
-            clicked = page.evaluate(
-                """(sel) => {
-                    const btn = document.querySelector(sel);
-                    if (!btn) return false;
-                    btn.click();
-                    return true;
-                }""",
-                _SELECTORS["stop_button"],
-            )
+            clicked = page.evaluate(_CLICK_STOP_JS, _SELECTORS["stop_button"])
             return bool(clicked)
 
     # ── Models ───────────────────────────────────────────────────────

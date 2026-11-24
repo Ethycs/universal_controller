@@ -1,0 +1,21 @@
+[Unit]
+Description=UC Grok OpenAI-compatible proxy (loopback)
+Wants=uc-service.service
+After=uc-service.service network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/universal_controller
+Environment=PYTHONUTF8=1
+Environment=PYTHONIOENCODING=utf-8
+Environment=UC_AUTO_BOOTSTRAP=0
+Environment=UC_GROK_SERVICE_URL=http://127.0.0.1:4010
+ExecStart=%h/.pixi/bin/pixi run --frozen litellm --config %h/universal_controller/grok-proxy.config.yaml --host 127.0.0.1 --port 4000 --num_workers 1
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=30
+UMask=0077
+
+[Install]
+WantedBy=default.target

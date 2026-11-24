@@ -1,0 +1,26 @@
+# Grok-only production proxy. The UC service owns the browser and sessions.
+# Set UC_GROK_SERVICE_URL explicitly; no local-browser fallback is provided.
+model_list:
+  - model_name: uc-grok
+    litellm_params:
+      model: uc/grok
+      timeout: 360
+  - model_name: grok-browser
+    litellm_params:
+      model: uc/grok
+      timeout: 360
+
+litellm_settings:
+  custom_provider_map:
+    - provider: uc
+      custom_handler: uc_provider_loader.uc_handler
+  drop_params: true
+
+# A timeout can happen after Grok accepted a prompt. Never replay it.
+router_settings:
+  num_retries: 0
+  max_fallbacks: 0
+
+general_settings:
+  worker_concurrency: 1
+  request_timeout: 360
