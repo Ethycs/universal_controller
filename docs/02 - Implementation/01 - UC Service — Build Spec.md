@@ -154,10 +154,10 @@ Selected by constructor arguments; no environment variable participates. This is
 
 | Argument | Rule |
 |---|---|
-| `service` | Service address, e.g. `http://127.0.0.1:4010`. Omitted or `None`: in-process behaviour (constraint 4), whatever the environment holds |
+| `service` | Service address, e.g. `http://127.0.0.1:4010`. Omitted or `None`: local launching (constraint 4), unless `cdp_endpoint` explicitly selects external attachment (§4.1); never environment-selected |
 | `window` | Window name. Required and non-empty when `service` is supplied; supplying `window` without `service` raises `ValueError` |
 | `label` | Optional client label; never derived from the environment |
-| `timeout_ms` | Allowed in both modes |
+| `timeout_ms` | Allowed in all paths; also bounds direct CDP connection establishment |
 | `mode` (non-`None`), `headless`, `use_extension`, `native_chrome` (non-`None`, including `False`), explicitly passed `channel` or `stealth` (even at their default values) | Mixed with `service`: `ValueError` at construction. `channel` and `stealth` use sentinels so local mode keeps its old defaults and explicit local values |
 
 `start()` first does `GET /windows` and checks that the named window exists and offers attach. A missing window or a window without attach raises `ValueError` before registration, service start or Playwright. Only then the sequence below runs. A CDP endpoint missing after start is unexpected: `RuntimeError`, with cleanup.
@@ -184,6 +184,14 @@ Pump Playwright events **before** snapshotting `context.pages`; reading that pro
 **Context-independence audit.** All 39 original page-taking control bodies were inspected for `self._context`: zero accesses. Retain the Theory doc's grep audit when adding controls; local fallback and the unstarted worker receiver depend on this. Behavioral regressions check real caller-page text and raw Playwright errors rather than pinning source strings.
 
 **Errors.** A dead service surfaces as connection errors on HTTP and "target closed" errors on pages; revocation (E10) surfaces as "target closed" alone. Wrap the first as `UCServiceGone`. Leave the second as the Playwright error it is: the thread it interrupts was abandoned and should unwind.
+
+### 4.1 Explicit attachment outside the service
+
+`UCBrowser(cdp_endpoint=url, label=None, timeout_ms=30000)` borrows the first context at the named HTTP or browser-WebSocket CDP endpoint. Empty/non-string endpoints, `service`, `window` and any explicit in-process launch arguments are rejected at construction. There is no endpoint discovery, environment selection, profile access or launch fallback. This restores intentional attachment to an operator-cleared browser without restoring the old implicit fixed-port behavior.
+
+No stealth, cookies, API shim, engine or context init scripts are installed. Page controls retain their local implementations. The client tracks only pages created by its public page-opening methods and their popups; failed navigation closes its new page. Teardown closes tracked pages best-effort, then stops its driver to disconnect. Neither the borrowed context nor browser is closed; pre-existing and independently opened tabs remain. Repeated close is safe; repeated start while attached is an error. A connection failure is `RuntimeError` naming the endpoint.
+
+This path has no service registration, lease, sweep or revocation. Its label is caller metadata only. The service still refuses profiles it does not own; no service window brokering an external browser is implemented here. Verification: `tests/test_cdp_attachment.py` exercises real disposable Chromium, unrelated-tab survival, popups, navigation failure, interception, local text control and reattachment. Operator-cleared native-site access remains unverified until the consumer's separate live check.
 
 ## 5. Service internals
 

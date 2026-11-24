@@ -432,20 +432,31 @@ class UCBrowser:
         service: Optional[str] = None,
         window: Optional[str] = None,
         label: Optional[str] = None,
+        cdp_endpoint: Optional[str] = None,
     ):
-        if service is not None:
+        if service is not None and cdp_endpoint is not None:
+            raise ValueError("service and cdp_endpoint are mutually exclusive")
+        if service is not None or cdp_endpoint is not None:
             if (mode is not None
                     or any(x is not None for x in (headless, use_extension, native_chrome))
                     or channel is not _UNSET_LAUNCH_ARGUMENT
                     or stealth is not _UNSET_LAUNCH_ARGUMENT):
-                raise ValueError("service and in-process launch arguments are mutually exclusive")
+                raise ValueError(
+                    "service/cdp_endpoint and in-process launch arguments are mutually exclusive",
+                )
+        if cdp_endpoint is not None:
+            if not isinstance(cdp_endpoint, str) or not cdp_endpoint.strip():
+                raise ValueError("cdp_endpoint requires a non-empty URL")
+            if window is not None:
+                raise ValueError("window requires service, not cdp_endpoint")
+        elif service is not None:
             if not isinstance(service, str) or not service.strip():
                 raise ValueError("service requires a non-empty URL")
             if not isinstance(window, str) or not window.strip():
                 raise ValueError("service requires an explicit non-empty window")
         elif window is not None:
             raise ValueError("window requires service")
-        # A service attachment has no inferred local launch mode.
+        # An attachment has no inferred local launch mode.
         elif mode is None:
             mode = self._infer_mode_from_legacy_flags(
                 headless, use_extension, native_chrome,
@@ -466,6 +477,8 @@ class UCBrowser:
         self._stealth_plugin = None
         self._chrome_proc = None
         self._service_url = service
+        self._cdp_endpoint = cdp_endpoint
+        self._cdp_pages: set = set()
         self._configured_window = window
         # Attachment state stays unset until start() succeeds. An unstarted
         # receiver always runs page-taking controls locally.
@@ -511,7 +524,7 @@ class UCBrowser:
 
     @property
     def label(self) -> Optional[str]:
-        """Label this client registers with the service (read-only)."""
+        """Caller-supplied label; registered remotely only in service mode."""
         return self._label
 
     @property
@@ -527,11 +540,16 @@ class UCBrowser:
         self.close()
 
     def start(self) -> None:
-        """Launch in-process, or attach to the explicitly configured service
-        window. Discovery must offer attach before any registration or launch;
-        service mode installs no client-side init scripts."""
+        """Launch locally or attach to the explicit service/CDP endpoint.
+
+        Attachments install no client-side context scripts. Direct CDP
+        borrows the first context without launching or modifying its identity.
+        """
         if self._service_url is not None:
             self._start_service(self._service_url)
+            return
+        if self._cdp_endpoint is not None:
+            self._start_cdp()
             return
 
         from playwright.sync_api import sync_playwright
@@ -683,6 +701,56 @@ class UCBrowser:
         self._context = context
         logger.info("Connected to native Chrome via CDP (%s).", cdp)
 
+    def _start_cdp(self) -> None:
+        """Borrow an external browser; ownership stays with its launcher."""
+        from playwright.sync_api import sync_playwright
+
+        if self._pw is not None:
+            raise RuntimeError("CDP attachment is already started")
+        try:
+            self._pw = sync_playwright().start()
+            try:
+                self._browser = self._pw.chromium.connect_over_cdp(
+                    self._cdp_endpoint, timeout=self.timeout_ms,
+                )
+            except PlaywrightError as exc:
+                raise RuntimeError(
+                    f"Could not attach to CDP endpoint {self._cdp_endpoint!r}: {exc}",
+                ) from exc
+            if not self._browser.contexts:
+                raise RuntimeError(
+                    f"CDP endpoint {self._cdp_endpoint!r} exposed no browser context",
+                )
+            self._context = self._browser.contexts[0]
+        except BaseException:
+            self._close_cdp()
+            raise
+
+    def _track_cdp_page(self, page) -> None:
+        self._cdp_pages.add(page)
+        page.on("close", lambda closed: self._cdp_pages.discard(closed))
+        # Popups belong to their opener, not every tab discovered on CDP.
+        page.on("popup", self._track_cdp_page)
+
+    def _close_cdp(self) -> None:
+        """Close our tabs, then stop our driver to disconnect, never the context."""
+        try:
+            while self._cdp_pages:
+                page = self._cdp_pages.pop()
+                try:
+                    if not page.is_closed():
+                        page.close()
+                except Exception as exc:
+                    logger.debug("CDP owned-page cleanup failed: %s", exc)
+        finally:
+            pw = self._pw
+            self._context = self._browser = self._pw = None
+            if pw is not None:
+                try:
+                    pw.stop()
+                except Exception as exc:
+                    logger.debug("CDP disconnect failed: %s", exc)
+
     # ── Service mode ────────────────────────────────────────────────────
 
     def _start_service(self, url: str) -> None:
@@ -781,9 +849,12 @@ class UCBrowser:
             return False
 
     def close(self) -> None:
-        """Shut down browser and Playwright."""
+        """Release service leases, disconnect borrowed CDP, or shut down our launch."""
         if self._service is not None:
             self._close_service()
+            return
+        if self._cdp_endpoint is not None:
+            self._close_cdp()
             return
         if self._context:
             try:
@@ -818,10 +889,14 @@ class UCBrowser:
         In-process: created on the local context with the stealth plugin
         applied. Service mode: the service creates it (leased to this client)
         and the target id is resolved to a local Page on this connection.
+        Direct CDP: created on the borrowed context without stealth and owned
+        by this client, together with its popups, until close().
         """
         client = self._service
         if client is None:
             page = self._context.new_page()
+            if self._cdp_endpoint is not None:
+                self._track_cdp_page(page)
             if self._stealth_plugin:
                 self._stealth_plugin.apply_stealth_sync(page)
             return page

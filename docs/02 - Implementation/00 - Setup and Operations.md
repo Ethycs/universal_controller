@@ -62,7 +62,24 @@ Background health probes are **off by default**. Opt in with `pixi run python -m
 
 `UC_WINDOWS_FILE` selects a windows config; with no file, the service defines one lazy local Chromium/extension window. Build `extension/dist/uc-extension.js` before starting even lazy extension/inject windows: startup refuses a missing bundle. No live profile or service unit is installed by these commands.
 
-Consumers opt in explicitly with `UCBrowser(service="http://127.0.0.1:4010", window="harvest")`; omitting `service` retains in-process operation. `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` and `UC_CLIENT_LABEL` are no longer read, and `ServiceClient(url)` requires an explicit address. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Grok uses the site-session routes through its explicitly configured HTTP consumers (§6); this does not migrate harvest, generic or health browsers.
+Consumers opt in explicitly with `UCBrowser(service="http://127.0.0.1:4010", window="harvest")`; omitting both `service` and `cdp_endpoint` retains local launching. `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` and `UC_CLIENT_LABEL` are no longer read, and `ServiceClient(url)` requires an explicit address. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Grok uses the site-session routes through its explicitly configured HTTP consumers (§6); this does not migrate harvest, generic or health browsers.
+
+### 5.1 Attach to a caller-owned browser
+
+For a browser the operator already launched and cleared, the consumer explicitly names its CDP endpoint:
+
+```python
+from uc_browser import UCBrowser
+
+with UCBrowser(cdp_endpoint="http://127.0.0.1:9222", label="event_tool") as browser:
+    page = browser.open("https://example.com")
+```
+
+This is direct attachment, not a service window or a native launch. UC never selects the endpoint from the environment, probes for one, launches a browser, checks a profile lock, injects cookies, applies stealth, or installs context scripts. It borrows the first context. `mode`, legacy launch flags, explicit `channel`/`stealth`, `service` and `window` cannot be combined with `cdp_endpoint`.
+
+`new_page`, `open` and `open_with_intercept` own their resulting tabs and popups. Exit closes those tabs best-effort and disconnects the driver; pre-existing tabs and tabs opened independently during attachment remain. A refused connection raises `RuntimeError` naming the endpoint, without falling back to a launch. The label is caller metadata, not a service registration or revocation handle. Controls execute locally with the existing engine/fallback behavior; no engine is injected.
+
+**Verification:** `pixi run --frozen -e dev pytest -q tests/test_cdp_attachment.py tests/test_service_client.py` uses disposable headless Chromium profiles and loopback fixture pages, never port 9222 or signed-in profiles. Real-site clearance after attachment remains **unverified**; CDP attachment itself can affect bot checks.
 
 ## 6. Grok proxy and service deployment
 

@@ -52,6 +52,8 @@ flowchart LR
 
 With `UCBrowser(service=url, window=name)` (caller names both; no environment fallback), `start()` validates the window via `GET /windows`, then registers a pid-bound client, attaches over CDP, creates leased pages through HTTP, and sends page controls to the service. `new_page()` is public in both modes; raw page scripting and interception remain local. Without `service`, existing in-process use remains available; native launch uses a dynamically selected explicit loopback port and held-profile guards.
 
+With `UCBrowser(cdp_endpoint=url, label=...)`, the caller instead borrows an externally owned browser's first context. This is mutually exclusive with service selection and launch arguments. No environment lookup, launch, profile-lock check, stealth, cookie injection or context init script occurs. Pages created through `new_page`, `open`, `open_with_intercept` and their popups belong to this client; close releases those pages and stops its Playwright driver, never the context or browser. Independently opened tabs survive. Controls run locally, not through the service; there is no service lease or revocation label.
+
 ## 5. Registry (`uc_browser/registry.py`)
 
 - **Domain**: which sites UC knows about, operationally (distinct from bench oracles, which never leave `bench/`).

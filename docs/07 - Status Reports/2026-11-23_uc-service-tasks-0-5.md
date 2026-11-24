@@ -135,3 +135,12 @@ Observed verification:
 7. Through the running event_tool MCP gateway, `list_chat_sessions` returned the shared `uc-migration-smoke` session and `grok_list_conversations` returned the one conversation in the configured NSFW project. Neither check sent another prompt.
 
 No prompt/reply text or cookies are included in these logs. Full-suite, Windows, multi-day idle and real long-generation stop/concurrency are not claimed. Independent stop and concurrency were exercised with deterministic blocked-worker tests.
+
+## 11. 2026-11-24 authorized explicit external-CDP attachment
+
+PBX 210-1001 reported native harvest sources failing with `profile_held` after the pin move: native launch no longer implicitly attaches to the operator's already-open Chrome. The owner authorized an explicit attachment path and isolated tests, leaving live Chrome and the consumer tree untouched.
+
+- Added `UCBrowser(cdp_endpoint=..., label=...)`, exclusive with service/window and launch arguments. No environment selection, profile lock, browser launch, stealth, cookie injection or context scripts.
+- Public page-opening methods and their popups are client-owned. Exit closes those tabs and disconnects; unrelated tabs/context/browser survive. Connection errors name the endpoint; there is no local-launch fallback.
+- Verification: `pixi run --frozen -e dev pytest -q tests/test_cdp_attachment.py tests/test_service_client.py` — **96 passed in 41.83 s**. Disposable Chromium proved interception, local text controls, caller-close, popup cleanup, failed-navigation cleanup, unrelated tabs opened before/during attachment, and reattachment to the surviving browser.
+- No extension sources changed. No service/proxy restart, event_tool edit, signed-in profile access or port-9222 connection was made. Real erobay/ra-sf access and Cloudflare clearance are **unverified** here; consumer pin/routing and the live check remain with PBX 210-1001.
