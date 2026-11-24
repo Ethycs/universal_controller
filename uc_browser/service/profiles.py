@@ -3,7 +3,9 @@
 Shared by the window core (``windows.py``) and the standalone native-Chrome
 launch path of ``UCBrowser``. Nothing here touches Playwright objects except
 ``launch_native`` (which receives the caller's ``pw`` and attaches on the
-calling thread).
+calling thread); ``launch_native_process`` starts the same owned Chrome and
+attaches nothing, and ``devtools_request`` / ``established_clients`` serve
+the HTTP-only owner of an *unattached* window (``unattached.py``).
 
 Rules enforced here:
 
@@ -22,19 +24,20 @@ Rules enforced here:
     only if it is fresh, answers ``/json/version`` with the recorded browser
     path, and belongs to the process that holds the profile
     (``wait_for_endpoint`` + ``verify_endpoint_owner``).
-  - **Installed native Chrome** (``launch_native``; native windows and
-    in-process ``UCBrowser``) runs with an explicit nonzero loopback port that
-    this module picks just before the launch: port ``0`` makes native Chrome
-    report ``navigator.webdriver=true``, an explicit port does not. An
-    explicit port writes no ``DevToolsActivePort``, so this path never reads
-    that file. Because the port is picked before Chrome binds it, another
-    process can take it in between; so the endpoint is trusted only when the
-    launched Chrome itself announced it on its own stderr
+  - **Installed native Chrome** (``launch_native`` / ``launch_native_process``;
+    native windows and in-process ``UCBrowser``) runs with an explicit nonzero
+    loopback port that this module picks just before the launch: port ``0``
+    makes native Chrome report ``navigator.webdriver=true``, an explicit port
+    does not. An explicit port writes no ``DevToolsActivePort``, so this path
+    never reads that file. Because the port is picked before Chrome binds it,
+    another process can take it in between; so the endpoint is trusted only
+    when the launched Chrome itself announced it on its own stderr
     (``DevTools listening on ws://127.0.0.1:<port>/devtools/browser/<id>``,
     ``<id>`` random), the launched process is alive, and ``/json/version`` on
     that port serves exactly that browser path. That proof needs no
     ``/proc``, so it holds on Windows too; on Linux ``verify_endpoint_owner``
-    adds the socket-owner check.
+    adds the socket-owner check. Both launchers share one implementation
+    (``_start_native``): they differ only in whether Playwright attaches.
 * Every launch failure terminates the processes this launch started.
 * The installed Chrome sandbox is preserved: no ``--no-sandbox`` here.
 """
@@ -55,6 +58,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -216,6 +220,102 @@ def port_owned_by(port: int, pids: set[int]) -> bool | None:
     return False if readable else None
 
 
+def _socket_owners(inodes: set[int]) -> dict[int, int]:
+    """``{inode: pid}`` for the sockets in ``inodes`` held by a process whose
+    descriptors are readable (Linux); the rest are simply absent."""
+    owners: dict[int, int] = {}
+    if not inodes:
+        return owners
+    try:
+        pids = [int(entry) for entry in os.listdir("/proc") if entry.isdigit()]
+    except OSError:
+        return owners
+    for pid in pids:
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            names = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for name in names:
+            try:
+                target = os.readlink(f"{fd_dir}/{name}")
+            except OSError:
+                continue
+            m = re.fullmatch(r"socket:\[(\d+)\]", target)
+            if m and int(m.group(1)) in inodes:
+                owners.setdefault(int(m.group(1)), pid)
+        if len(owners) == len(inodes):
+            break
+    return owners
+
+
+def _proc_established(port: int) -> list[int | None] | None:
+    """One entry per ESTABLISHED socket whose local end is ``port`` (the pid
+    of the process on the other end of it, or None when unreadable), from
+    ``/proc/net/tcp*``. None when a table cannot be read or parsed."""
+    peers: list[int] = []  # peer ports of the server-side sockets
+    clients: dict[int, int] = {}  # sockets connected to ``port``: their local port -> inode
+    seen = False
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(table, encoding="ascii") as fh:
+                rows = fh.read().splitlines()[1:]
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return None
+        seen = True
+        for row in rows:
+            cols = row.split()
+            if not cols:
+                continue
+            try:
+                if cols[3] != "01":  # 01 = ESTABLISHED
+                    continue
+                local = int(cols[1].rsplit(":", 1)[1], 16)
+                remote = int(cols[2].rsplit(":", 1)[1], 16)
+                if local == port:
+                    peers.append(remote)
+                elif remote == port:
+                    clients[local] = int(cols[9])
+            except (IndexError, ValueError):
+                return None
+    if not seen:
+        return None
+    owners = _socket_owners({clients[p] for p in peers if p in clients})
+    return [owners.get(clients.get(p)) for p in peers]
+
+
+def established_clients(port: int) -> list[int | None] | None:
+    """The peers holding an ESTABLISHED connection to the loopback listener on
+    ``port`` (its accepted, server-side sockets): one entry per connection,
+    the peer's pid or None when that is not readable. ``[]`` means no peer;
+    None means the table cannot be read at all and the caller must treat it
+    as "unknown", never as zero.
+
+    A CDP attachment is a long-lived websocket, so this is what an attached
+    client looks like from the debugging port; an idle DevTools HTTP request
+    is not (urllib closes it with the response). A request in flight is
+    counted, so callers serialise their own requests around the check.
+    Linux reads ``/proc/net/tcp*``; elsewhere ``psutil.net_connections``.
+    """
+    found = _proc_established(port)
+    if found is not None:
+        return found
+    try:
+        import psutil
+
+        connections = psutil.net_connections(kind="tcp")
+    except Exception:  # noqa: BLE001 - not installed, AccessDenied, unsupported: cannot tell
+        return None
+    up = [c for c in connections if c.status == psutil.CONN_ESTABLISHED and c.laddr]
+    return [
+        next((o.pid for o in up if c.raddr and o.laddr.port == c.raddr.port and o.raddr and o.raddr.port == port), None)
+        for c in up
+        if c.laddr.port == port
+    ]
+
+
 # ── Held-profile detection ────────────────────────────────────────────────
 
 
@@ -320,6 +420,23 @@ def devtools_http(port: int, path: str, timeout: float = 1.0):
     """GET a JSON document from a loopback DevTools HTTP endpoint (no proxy)."""
     with _OPENER.open(f"http://127.0.0.1:{port}{path}", timeout=timeout) as resp:
         return json.load(resp)
+
+
+def devtools_request(port: int, path: str, *, method: str = "GET", timeout: float = 1.0) -> tuple[int, bytes]:
+    """One loopback DevTools HTTP request (no proxy): ``(status, body)``.
+
+    HTTP error statuses are returned, not raised: ``/json/close`` answers
+    plain text (not JSON) and 404 for an unknown target, and ``/json/new``
+    answers 405 to anything but PUT. Transport failures (refused, reset,
+    timeout, malformed response) raise ``OSError`` or ``http.client.HTTPException``.
+    """
+    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method)
+    try:
+        with _OPENER.open(request, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        with exc:
+            return exc.code, exc.read()
 
 
 def list_page_targets(port: int) -> set[str] | None:
@@ -630,23 +747,15 @@ def _await_native_endpoint(
         watch.wait(0.05)
 
 
-def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None = None, timeout: float = 30.0):
-    """Launch installed Chrome on ``profile`` and attach ``pw`` to it.
+def _start_native(profile: Path, *, extra_args, chrome_path: str | None, timeout: float, attach=None):
+    """Start installed Chrome on ``profile`` and prove its endpoint.
 
-    Returns ``(proc, browser, context, cdp)``; ``cdp`` is
-    ``ws://127.0.0.1:<port>/devtools/browser/<id>``. ``pw`` is the caller's
-    sync Playwright and is used on the calling thread only. The caller owns
-    teardown (``terminate_process(proc)`` once it is done with the browser).
-
-    Uses an explicitly selected loopback port, not port 0. The live child's
-    stderr announcement and /json/version must agree before attachment;
-    where available, /proc additionally verifies socket ownership. A bind
-    race fails closed without retrying or attaching to the foreign browser.
-    stderr is drained for the browser's lifetime. No --no-sandbox is added.
-
-    Raises ``ServiceError``: ``profile_held`` (409) if a browser holds the
-    profile or exits at once because one does; ``launch_failed`` otherwise.
-    Processes this call started are terminated on any failure.
+    Returns ``(proc, cdp, attached)``. ``attached`` is ``attach(cdp)`` when
+    given (run inside the failure guard, still under the launch lock), else
+    None. Everything ``launch_native`` promises about the process and the
+    endpoint proof holds for both public launchers; the caller owns teardown
+    (``terminate_process(proc)``), and a failure here has already stopped
+    the process this call started.
     """
     profile = Path(profile).expanduser().resolve()
     chrome = chrome_path or find_chrome()
@@ -689,12 +798,58 @@ def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None =
             bpath = _await_native_endpoint(profile, proc, watch, port, deadline)
             verify_endpoint_owner(profile, port, launched=_descendants(proc.pid))
             cdp = f"ws://127.0.0.1:{port}{bpath}"
-            browser = pw.chromium.connect_over_cdp(cdp)
-            contexts = browser.contexts
-            context = contexts[0] if contexts else browser.new_context()
-            return proc, browser, context, cdp
+            return proc, cdp, (attach(cdp) if attach is not None else None)
         except BaseException as exc:
             _stop_native(proc, watch)
             if isinstance(exc, (ServiceError, KeyboardInterrupt, SystemExit)):
                 raise
-            raise ServiceError("launch_failed", f"native Chrome attach failed: {exc}") from exc
+            step = "attach" if attach is not None else "launch"
+            raise ServiceError("launch_failed", f"native Chrome {step} failed: {exc}") from exc
+
+
+def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None = None, timeout: float = 30.0):
+    """Launch installed Chrome on ``profile`` and attach ``pw`` to it.
+
+    Returns ``(proc, browser, context, cdp)``; ``cdp`` is
+    ``ws://127.0.0.1:<port>/devtools/browser/<id>``. ``pw`` is the caller's
+    sync Playwright and is used on the calling thread only. The caller owns
+    teardown (``terminate_process(proc)`` once it is done with the browser).
+
+    Uses an explicitly selected loopback port, not port 0. The live child's
+    stderr announcement and /json/version must agree before attachment;
+    where available, /proc additionally verifies socket ownership. A bind
+    race fails closed without retrying or attaching to the foreign browser.
+    stderr is drained for the browser's lifetime. No --no-sandbox is added.
+
+    Raises ``ServiceError``: ``profile_held`` (409) if a browser holds the
+    profile or exits at once because one does; ``launch_failed`` otherwise.
+    Processes this call started are terminated on any failure.
+    """
+
+    def attach(cdp: str):
+        browser = pw.chromium.connect_over_cdp(cdp)
+        contexts = browser.contexts
+        return browser, (contexts[0] if contexts else browser.new_context())
+
+    proc, cdp, (browser, context) = _start_native(
+        profile, extra_args=extra_args, chrome_path=chrome_path, timeout=timeout, attach=attach
+    )
+    return proc, browser, context, cdp
+
+
+def launch_native_process(profile: Path, *, extra_args=(), chrome_path: str | None = None, timeout: float = 30.0):
+    """Launch installed Chrome on ``profile`` and attach nothing.
+
+    Returns ``(proc, cdp)`` with the same owned-process endpoint proof, launch
+    lock, held-profile refusal and failure cleanup as ``launch_native``: the
+    child's own stderr announcement, ``/json/version`` and (on Linux) socket
+    ownership must agree, and a foreign profile holder or listener is never
+    adopted. No Playwright object exists on this path and the browser sees no
+    CDP websocket from this launch; callers talk to its DevTools HTTP port
+    (``devtools_request``) and may attach to ``cdp`` themselves later. The
+    caller owns teardown (``terminate_process(proc)``).
+    """
+    proc, cdp, _ = _start_native(
+        profile, extra_args=extra_args, chrome_path=chrome_path, timeout=timeout
+    )
+    return proc, cdp

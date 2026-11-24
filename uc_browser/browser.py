@@ -800,24 +800,29 @@ class UCBrowser:
 
     @staticmethod
     def _release_service(client, client_id, browser, pw) -> None:
-        """Best-effort teardown: release the client (closing its leased
-        pages), then disconnect. ``browser.close()`` on a CDP attachment only
-        detaches; the context is never closed."""
-        if client_id is not None:
-            try:
-                client.close_client(client_id)
-            except Exception as e:
-                logger.debug("DELETE client %s failed during teardown: %s", client_id, e)
+        """Disconnect before releasing the lease, so a quiet native preparer
+        cannot start while this client's CDP connection is still alive."""
+        disconnected = browser is None and pw is None
         if browser is not None:
             try:
-                browser.close()
+                browser.close()  # CDP disconnect, not remote Browser.close
+                disconnected = True
             except Exception as e:
                 logger.debug("browser disconnect failed during teardown: %s", e)
         if pw is not None:
             try:
                 pw.stop()
+                disconnected = True
             except Exception as e:
                 logger.debug("playwright.stop() failed during teardown: %s", e)
+        if client_id is not None:
+            if not disconnected:
+                logger.warning("Retaining client %s: CDP disconnect was not confirmed", client_id)
+                return
+            try:
+                client.close_client(client_id)
+            except Exception as e:
+                logger.debug("DELETE client %s failed during teardown: %s", client_id, e)
 
     def _close_service(self) -> None:
         client, client_id = self._service, self._client_id

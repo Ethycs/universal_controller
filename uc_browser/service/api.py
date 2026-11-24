@@ -21,6 +21,7 @@ class RegisterBody(Body):
     pid: StrictInt
     label: str = ""
     window: str = "default"
+    unattached: bool = False
 
 
 class PageBody(Body):
@@ -76,7 +77,10 @@ def create_router(manager, leases, operations) -> APIRouter:
 
     @router.post("/clients")
     async def register(body: RegisterBody):
-        client_id = await asyncio.to_thread(leases.register, body.pid, body.label, body.window)
+        if body.unattached:
+            client_id = await asyncio.to_thread(leases.register, body.pid, body.label, body.window, unattached=True)
+        else:
+            client_id = await asyncio.to_thread(leases.register, body.pid, body.label, body.window)
         return {"client_id": client_id}
 
     @router.delete("/clients")
@@ -89,6 +93,13 @@ def create_router(manager, leases, operations) -> APIRouter:
 
     @router.post("/windows/{name}/pages")
     async def new_page(name: str, body: PageBody):
+        if await asyncio.to_thread(leases.is_unattached_client, name, body.client_id):
+            # A quiet client's page is made over DevTools HTTP: no worker
+            # attaches, so there is nothing to navigate or wait on.
+            if body.wait_ms:
+                raise ServiceError("wait_unsupported", "wait_ms is not supported for an unattached client", 400)
+            target = await asyncio.to_thread(leases.create_page, name, body.client_id, url=body.url)
+            return {"target_id": target}
         target = await asyncio.to_thread(leases.create_page, name, body.client_id)
         if body.url is not None:
             try:
@@ -101,6 +112,15 @@ def create_router(manager, leases, operations) -> APIRouter:
                         raise
                 raise
         return {"target_id": target}
+
+    @router.get("/windows/{name}/pages/{target}")
+    async def page_info(name: str, target: str):
+        window = manager.get(name)
+        pages = await asyncio.to_thread(lambda: window.owner(lambda rt: rt.pages_info(), launch=False).result())
+        for page in pages:
+            if page["target_id"] == target:
+                return page
+        raise ServiceError("no_such_target", "no such page", 404)
 
     @router.delete("/windows/{name}/pages/{target}")
     async def close_page(name: str, target: str):

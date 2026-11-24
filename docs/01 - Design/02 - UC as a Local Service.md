@@ -1,7 +1,7 @@
 # UC as a Local Service — one owner for every browser identity; every access technique offered on it, none required
 
-**Status**: CURRENT for handoff tasks 0–5; the authorized Grok session/provider/MCP and user-unit migration is in progress. Generic/health and non-Grok consumer moves remain future work. The lifecycle tables retain the full migration requirements; the status report records observed deployment evidence.
-**Date**: 2026-11-23
+**Status**: CURRENT — Grok/proxy/MCP migration is deployed. Native HTTP-only ownership and quiet reservations are implemented; consumer deployment evidence is in the status report. Standard harvest, generic/health and other consumer moves remain separate.
+**Date**: 2026-11-24
 **Applies to**: `uc_browser/browser.py`, `uc_browser/status_server.py`, `uc_browser/sites/`, `uc_browser/health.py`, `uc_browser/llm_providers/uc.py`, `uc_browser/mcp/`; consumers, chiefly `event_tool`
 **Depends on**: `docs/00 - Theory/00 - Windows, Transport and Control.md` (the model), `docs/08 - Analysis/00 - Service Prototype Measurements.md` (the evidence; "row N" refers to its §3), `docs/03 - Architecture/00 - System Overview.md` (what exists)
 
@@ -12,7 +12,7 @@
 3. **The service listens on loopback only.**
 4. **A served profile is opened by the service and by nothing else.** One stray `UCBrowser` launch on a served profile brings the lock failures back.
 5. **Every lifecycle in §3 has a pathway.** A change to this design that strands one of those rows is not finished.
-6. **Routing is explicit.** The caller names the window and the offer it uses; neither the library nor the service infers that choice. `UCBrowser(service=url, window=name)` explicitly requests attachment and validates the `attach` offer; HTTP-only callers choose their routes directly. Omitting `service` means in-process, regardless of environment.
+6. **Routing is explicit.** The caller names the window and offer; neither library nor service infers them. `UCBrowser(service=url, window=name)` requests service attachment; HTTP-only callers choose their routes. `cdp_endpoint` explicitly borrows an external browser. Omitting both means local launching, regardless of environment.
 
 ## 0. What is wrong now
 
@@ -119,11 +119,11 @@ Windows are declared in a config file; UC ships none beyond a single default so 
 |---|---|---|---|---|
 | `harvest` | Playwright's Chromium | extension, at launch | Instagram and event-site sign-ins | `event_tool` harvest workers, `web_explore_*`, `web_diagnose`, CLI |
 | `grok` | Playwright's Chromium | extension, at launch | the Grok account | grok adapter sessions (in-service); through them the proxy, the Grok MCP tools and the export script |
-| `native` | installed Google Chrome | injected on demand | nothing persistent | `event_tool` native sources, Cloudflare retries, native explore sessions |
+| `native` | installed Google Chrome, HTTP-only owner | none in the measured deployment; optional page-local injection | native-site cookies and temporary clearance | native sources, retries and native explore sessions |
 
 Why three and not one: the harvest and Grok need different tolerance (the adapter must not have harvest tabs appear in its context), and native Chrome is a different binary. Why not more: the harvest's parallel workers want the *same* sign-ins, so they are tabs in one window, not windows.
 
-**Controls exist in every window.** Google Chrome does not load the engine as an extension, and today's `NATIVE_CDP` mode runs without it: `detect_all` there waits five seconds and returns empty, so native sources have never had cookie banners dismissed. The engine bundle does run in Google Chrome when evaluated over CDP (rows 21–23). In `native` the service injects it into a page at that page's first control call, and not before. The order matters: a native page exists to get past a bot check, and `event_tool` asks for controls only after its Cloudflare wait, so the page stays untouched until the check has passed. Whether injection *after* the check can still trip a site is Open question 1.
+**Native loading must be possible without any CDP connection.** Delayed engine injection alone was insufficient: peer measurements found a check spinning with Playwright attached, and passing when loaded unattached before a later client attached. An `unattached: true` native window therefore has an HTTP-only owner and no startup shim, cookie import or stealth. The caller reserves a quiet interval, opens/polls/closes a leased page through HTTP, decides readiness itself, then releases and attaches. Native deployment uses `engine: none`, preserving local absent-engine fallbacks. Optional `inject` controls attach transiently and inject only on the addressed page; their effect on real bot checks remains unverified.
 
 **Other engines.** UC `main` already probes with real Chrome, Firefox and WebKit, placing the engine by evaluation where no extension loads. A window on Firefox or WebKit offers everything in §1.2 except attach, which only Chromium-family browsers serve. Only in-service code (probes, the browser matrix) uses those engines today, so nothing is lost. Neither is installed on `smallblackbox`.
 
@@ -137,17 +137,17 @@ Each row is something a consumer does over time, what happens today, and the pat
 |---|---|---|---|
 | E0 | Browser-free sources (`ics`, `rss`, `luma`, `partiful`: 8 enabled) run in the same loop as browser sources | a browser is allocated that they never touch; `luma.py` says so in its docstring | techniques 1 and 2 need nothing from the service and must not register with it. `event_tool` should stop opening a `UCBrowser` for a group that holds only these. The service makes that waste cheap (no launch); removing it is a consumer change |
 | E1 | Long-lived host: `event-harvester-mcp` runs for days and performs every harvest | each harvest launches and should close two browsers | the process is a client; it launches nothing. Each `UCBrowser` it creates registers and attaches (§5, §6) |
-| E2 | A harvest splits standard sources over `WEB_PARALLEL` threads, plus one thread for native sources | one `UCBrowser` per thread; with more than one standard thread they would open the same profile | one `UCBrowser` per thread as before; each attaches to `harvest` or `native`. Threads share the window as tabs |
-| E3 | Per source: open → Cloudflare wait → controls → raw page work → close | controls run in-process | `open` asks the service for a page (§5); the wait and page work are transport; controls go to the control plane (§4) |
+| E2 | A harvest splits standard sources over `WEB_PARALLEL` threads plus native work | one browser per thread | standard workers attach to `harvest`; native work uses quiet preparation and an attachment per source. A native quiet reservation cannot overlap another client |
+| E3 | Per source: open → Cloudflare wait → controls → raw page work → close | controls run in-process | standard windows use ordinary attachment. Native sources first reserve quiet loading, poll title/URL without CDP using the consumer's predicate, close/release preparation, then attach for that source alone. Failure to prepare never triggers attachment |
 | E4 | Detail pages: `uc._context.new_page()` in batches of five, then `uc._stealth_plugin.apply_stealth_sync(page)` (calendar, feed, search, steps; Instagram likewise) | the client makes and stealths its own pages | `UCBrowser.new_page()`, a new public method, asks the service for a leased page; stealth is already on the window's context (row 19). `event_tool` moves these call sites to it when it consolidates its browser access in one module. Until then they keep working: `uc._context` is the real context and `uc._stealth_plugin` is `None`, which all three call sites guard. Such pages are unleased, so revocation (E10) does not reach them and only the sweep closes them (§5) |
 | E5 | Network observers: `open_with_intercept`, Instagram's request/response recorder, navigation tracer, screenshots | attached to the client's page | unchanged — all transport, on the client's own attachment |
 | E6 | MHTML checkpoints: a per-page CDP session calls `Page.captureSnapshot`; replay uses `set_content` | client-side | unchanged — transport |
-| E7 | A standard source hits Cloudflare and is retried in native Chrome after the groups finish | a second native `UCBrowser` | same call; it attaches to `native`. Its controls now work (§2) |
+| E7 | A standard source hits Cloudflare and is retried in native Chrome | another native browser | the same explicit native service route and per-source quiet preparation as E3; no implicit local-launch fallback |
 | E8 | A chat-mode source calls `uc.chat(page, query, timeout_s=45)` (none configured today) | long control in-process | a long control from a library client: the service runs it on a worker of its own for its duration, so short controls on the window are not delayed (§6) |
 | E9 | The group ends; the `with` block exits | `close()` shuts the browser | `close()` releases the client: the service closes its pages; the window stays |
-| E10 | **The job hits its 90-minute limit. The runner abandons a thread it cannot kill** | the thread keeps its browser indefinitely (Analysis §5) | the runner revokes the job's client by label; the service closes its pages from its own attachment; the stuck thread's next page call fails and it unwinds (§5). Needs one call added to `event_tool`'s job runner |
-| E11 | Explore sessions: up to three, each holding a `UCBrowser` across MCP calls, reaped by `event_tool` after 15 idle minutes; optionally native | each owns a browser; a native session and a harvest contend for port 9222 and one profile | each is a client holding one page; `event_tool`'s own reaper calls `close()` as now. Native sessions and the harvest share `native` as tabs |
-| E12 | CLI `web replay` / `web test` from a second process while the service process may be harvesting | a second launch on the harvest's profile | a second client of `harvest`. Its lease is that CLI process |
+| E10 | **The job times out and abandons a thread it cannot kill** | the thread keeps its browser indefinitely | revoke clients by job label and close their pages. Native cleanup uses HTTP, not an attachment. If the revoked thread still holds its browser websocket, new quiet reservations fail busy until it disconnects |
+| E11 | Explore sessions hold a browser across MCP calls, optionally native | each owns a browser | each is a registered client. A long-lived native attachment blocks quiet preparations; busy errors identify its label/pid. Consumer cleanup disconnects before releasing the lease |
+| E12 | CLI `web replay` / `web test` from a second process while harvesting | another launch can collide with the harvest's profile | standard CLI clients attach to `harvest`; native callers explicitly choose the native service route and honor quiet admission. Their leases belong to the CLI process |
 | E13 | `web login`: a separate Chrome whose only product is a state file the next harvest reads | fourth profile; sign-in happens in a browser nothing else uses | sign-in happens to the window (§8); the command becomes "open a tab in `harvest` and wait" |
 | E14 | The consumer service process (`event-harvester-mcp`) restarts (deploy) | its browsers die with it | nothing happens to UC's windows; the old consumer's clients are reaped by pid (§5). Restarting UC itself instead closes its windows (§11) |
 
@@ -202,7 +202,7 @@ Each row is something a consumer does over time, what happens today, and the pat
 Reasons the service creates the page rather than the client:
 
 1. **The lease starts at birth.** A page the service created is known to it from the first moment.
-2. **Per-window setup is already there.** Shim and stealth sit on the window's context and reach every page (rows 3, 19). No per-page step is left for a client to forget.
+2. **Per-window setup is already there for ordinary windows.** Shim and stealth reach later pages (rows 3, 19). Native unattached windows deliberately have neither; page creation, metadata and lease cleanup are HTTP-only.
 
 The client still navigates, so observers that hook the page (E5) attach before the first request, as now. A client must wait for the new target to appear on its own connection (row 6: 0.16–0.17 s); the client library hides this.
 
@@ -213,6 +213,7 @@ The client still navigates, so observers that hook the page (E5) attach before t
 - **Death:** a reaper closes the pages of any client whose process has exited (E12, E14). No heartbeat: the service is local, so process liveness is exact.
 - **Revocation:** anyone may release a client by label. This is the pathway for a holder that is alive but stuck (E10): the job runner labels its clients with the job id and revokes that label at the timeout. The service closes the pages through its own attachment, which a stuck holder cannot prevent (Theory §2, consequence 4).
 - **Sweep:** a page with no holder — made by a raw client over CDP — is left alone while any client is registered on its window, and closed once none is.
+- **Quiet loading:** a native preparer registers `unattached: true` only when there are no other clients, service workers or existing endpoint connections. Metadata alone does not determine page readiness; the consumer does. Ordinary cleanup disconnects before releasing registration. Raw clients bypassing registration and connecting after a reservation remain outside this coordination guarantee.
 
 *Rejected: idle timeouts on client pages.* A harvest worker can hold a page for many minutes making only transport calls, which the service does not see. Sessions are different: the service runs every operation on them and knows exactly when they are idle (§7).
 
@@ -222,8 +223,8 @@ Constraint 1 and Theory §1.5 fix the shape. The unit is *(thread, Playwright in
 
 | Thread | Per window | Does |
 |---|---|---|
-| **Owner** | one | launches the browser and holds the launching connection; installs context-level setup; creates and closes pages; relaunches after a crash |
-| **Control workers** | a small pool | each holds its own attachment to the window; runs short controls from library clients (E3) |
+| **Owner** | one | launches/owns the process and maintains pages. Ordinary windows retain Playwright; unattached native windows use HTTP only and perform no context setup |
+| **Control workers** | bounded short/long pools | ordinary windows retain idle attachments; native unattached windows attach per operation and disconnect before completion |
 | **Session workers** | one per live session, capped | each holds its own attachment and its session's page; runs that session's sends and waits (G4), and long controls borrowed by library clients (E8) |
 
 - A long operation occupies one session worker and nothing else (rows 14–17).
@@ -318,7 +319,7 @@ Each step leaves the system working and is verified before the next.
 2. Window manager, CDP endpoint listing, the control route with a worker pool, one Chromium window. No consumer changes.
 3. `UCBrowser` service mode: registration, `new_page()`, leases, reaper, revocation.
 4. Move `event_tool`'s standard harvest to `harvest`; add the revocation call to its job runner (E10).
-5. The `native` window with on-demand injection; move native sources, Cloudflare retries and native explore sessions.
+5. The `native` window with HTTP-only ownership and quiet loading; move native sources, retries, explore and CLI routing. Use no engine initially to preserve the measured access method; injection is optional and requires separate site verification.
 6. Sessions and site routes; move the grok adapter in-service; make the provider, the Grok MCP tools and the export script clients. Retire the extra Grok profiles.
 7. Cookie import; retire the separate login browser.
 8. Health probes and the generic client become sessions; remove the provider's pinned threads.
@@ -343,4 +344,4 @@ pixi run -e dev pytest -q tests/test_service_api.py tests/test_service_client.py
 pixi run python scripts/service_probe.py
 ```
 
-See the Build Spec §8 for live-service invocation and explicit limits. G1–G15 remain migration pathways, not claims that site sessions are deployed. No consumer, live profile or systemd unit was changed in tasks 0–5.
+See Build Spec §8 and the dated status report for current deployment evidence. The original tasks 0–5 used fresh profiles only; later authorized Grok deployment and native migration are recorded separately rather than inferred from those tests.

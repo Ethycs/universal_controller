@@ -54,6 +54,8 @@ With `UCBrowser(service=url, window=name)` (caller names both; no environment fa
 
 With `UCBrowser(cdp_endpoint=url, label=...)`, the caller instead borrows an externally owned browser's first context. This is mutually exclusive with service selection and launch arguments. No environment lookup, launch, profile-lock check, stealth, cookie injection or context init script occurs. Pages created through `new_page`, `open`, `open_with_intercept` and their popups belong to this client; close releases those pages and stops its Playwright driver, never the context or browser. Independently opened tabs survive. Controls run locally, not through the service; there is no service lease or revocation label.
 
+Native service windows may set `unattached: true`: the service owns the Chrome process but uses only DevTools HTTP for owner/reaper/page operations. An exclusive quiet client opens, reads title/URL and closes pages without any service attachment; site readiness remains consumer logic. Other HTTP operations attach transiently and detach before completion. Registered clients, active workers, unreadable socket state and existing endpoint connections prevent quiet admission. Persistent site sessions cannot use this window type. Direct raw CDP connections made after reservation are outside the guarantee.
+
 ## 5. Registry (`uc_browser/registry.py`)
 
 - **Domain**: which sites UC knows about, operationally (distinct from bench oracles, which never leave `bench/`).

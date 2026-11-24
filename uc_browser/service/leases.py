@@ -31,6 +31,7 @@ class Client:
     start_time: float
     label: str
     window: str
+    unattached: bool = False
 
 
 class LeaseStore:
@@ -58,8 +59,8 @@ class LeaseStore:
             self._thread.join()
             self._thread = None
 
-    def register(self, pid: int, label: str, window: str) -> str:
-        self.manager.get(window)
+    def register(self, pid: int, label: str, window: str, unattached: bool = False) -> str:
+        target_window = self.manager.get(window)
         try:
             identity = self.identity(pid)
         except psutil.AccessDenied as exc:
@@ -68,7 +69,27 @@ class LeaseStore:
             raise ServiceError("bad_pid", "pid must name a live local process", 400)
         client_id = uuid.uuid4().hex
         with self.lock:
-            self.clients[client_id] = Client(pid, identity, label, window)
+            if unattached:
+                holders = [
+                    f"{c.label or cid} (pid {c.pid})"
+                    for cid, c in self.clients.items() if c.window == window
+                ]
+                if holders:
+                    raise ServiceError(
+                        "busy", f"window {window!r} has registered clients: {', '.join(holders)}", 409,
+                    )
+                target_window.begin_unattached(client_id)
+            elif getattr(target_window.spec, "unattached", False):
+                holders = [
+                    f"{c.label or cid} (pid {c.pid})"
+                    for cid, c in self.clients.items() if c.window == window and c.unattached
+                ]
+                if holders:
+                    raise ServiceError(
+                        "busy", f"window {window!r} is reserved unattached by {', '.join(holders)}", 409,
+                    )
+                target_window.assert_attach_allowed()
+            self.clients[client_id] = Client(pid, identity, label, window, unattached)
         return client_id
 
     def _client(self, client_id: str, window: str) -> Client:
@@ -85,14 +106,31 @@ class LeaseStore:
             self.internal = {k: v for k, v in self.internal.items() if k[0] != name}
             self.generations[name] = generation
 
-    def create_page(self, name: str, client_id: str) -> str:
+    def is_unattached_client(self, name: str, client_id: str) -> bool:
+        with self.lock:
+            return self._client(client_id, name).unattached
+
+    @staticmethod
+    def _new_target(window, url: str | None = None, *, launch: bool = True) -> str:
+        if getattr(window.spec, "unattached", False):
+            return window.owner(
+                lambda rt: rt.new_page(url if url is not None else "about:blank"),
+                launch=launch,
+            ).result()
+        return window.owner(
+            lambda rt: rt.target_id(rt.context.new_page()), launch=launch,
+        ).result()
+
+    def create_page(self, name: str, client_id: str, url: str | None = None) -> str:
         window = self.manager.get(name)
         # Keep creation and lease assignment atomic against release/revocation.
         with self.lock:
-            self._client(client_id, name)
+            client = self._client(client_id, name)
+            if url is not None and not client.unattached:
+                raise ServiceError("bad_arguments", "direct URL creation requires an unattached client", 400)
             window.start()
             self._generation(window)
-            target = window.owner(lambda rt: rt.target_id(rt.context.new_page())).result()
+            target = self._new_target(window, url)
             self.leases[name, target] = client_id
             return target
 
@@ -102,9 +140,11 @@ class LeaseStore:
         leave it ``None``."""
         window = self.manager.get(name)
         with self.lock:
+            if getattr(window.spec, "unattached", False):
+                window.assert_attach_allowed()
             window.start()
             self._generation(window)
-            target = window.owner(lambda rt: rt.target_id(rt.context.new_page())).result()
+            target = self._new_target(window)
             self.internal[name, target] = holder
             return target
 
@@ -150,6 +190,8 @@ class LeaseStore:
             count = self._close_targets(window, targets)
             del self.clients[client_id]
             self.leases = {k: v for k, v in self.leases.items() if v != client_id}
+            if client.unattached:
+                window.end_unattached(client_id)
             return count
 
     def revoke(self, label: str) -> dict:
@@ -195,7 +237,7 @@ class LeaseStore:
                 blank = next((p for p in orphaned if p["url"] == "about:blank"), None)
                 if blank is None:
                     # Keep one blank target before closing the last real tab.
-                    window.owner(lambda rt: rt.target_id(rt.context.new_page()), launch=False).result()
+                    self._new_target(window, launch=False)
                 self._close_targets(window, [p["target_id"] for p in orphaned if p is not blank])
 
     def _run(self):

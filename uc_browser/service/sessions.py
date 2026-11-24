@@ -254,6 +254,10 @@ def parse_sites(raw, windows, specs: dict[str, SiteSpec]) -> dict[str, SiteConfi
             window = windows.get(window_name)
         except ServiceError as exc:
             raise ConfigError(f"site {name!r}: no window named {window_name!r}") from exc
+        if getattr(window.spec, "unattached", False):
+            raise ConfigError(
+                f"site {name!r}: persistent sessions cannot use unattached window {window_name!r}",
+            )
         offers = set(getattr(window.spec, "offers", ()))
         missing = [o for o in spec.requires if o not in offers]
         if missing:

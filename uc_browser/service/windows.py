@@ -17,6 +17,18 @@ to: ``Window.work`` runs on the owner thread instead. Every operation except
 other owner jobs, ``Window.info`` (which then reports its last pages) and
 shutdown of that window until it ends or the browser is closed.
 
+An **unattached** window (``unattached: true``; ``browser: chrome`` only, no
+``state_file``, no ``stealth``) launches the same native Chrome without
+Playwright and keeps no CDP websocket open while it idles: its owner is an
+``unattached.HttpRuntime`` (DevTools HTTP only: metadata, heartbeats, new
+page, close page), and each ``Window.work`` job, which includes every
+control, fetch, snapshot and cookie operation, attaches a temporary
+Playwright that is stopped before the job completes. No context setup runs
+at launch (no API shim, saved cookies or stealth; ``inject`` places the
+engine on one page per control). ``begin_unattached`` reserves such a window
+for one quiet client: while it lasts, no worker or ordinary client may
+attach, and it is refused while any attachment exists.
+
 Playwright objects never leave the thread that created them; ``Runtime``
 enforces it (see ``workers.py``).
 
@@ -26,6 +38,7 @@ Environment
 ``UC_SERVICE_HEADLESS`` ``1``/``true``: launch headless (not possible with the
                         ``extension`` engine, which needs a headed Chromium)
 ``UC_WINDOW_KEEPASSXC`` ``0``: do not stage/load KeePassXC for ``chrome`` windows
+                        (an unattached window never loads it)
 """
 
 from __future__ import annotations
@@ -42,11 +55,13 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from uc_browser import _paths
 
 from . import profiles
 from .errors import ServiceError
+from .unattached import HttpRuntime, TransientLane
 from .workers import (
     OWNER_HEARTBEAT_S,
     Deadlines,
@@ -69,10 +84,12 @@ LONG_CONTROLS = frozenset({"chat", "scroll_feed"})
 MAX_CONTROL_WORKERS = 16
 LAUNCH_TIMEOUT_S = 120.0
 INFO_WAIT_S = 5.0
+CLIENT_CHECK_WAIT_S = 15.0
 CONTROL_QUEUE_TIMEOUT_S = 30.0
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,47}")
 _SPEC_KEYS = frozenset(
-    {"browser", "engine", "profile", "state_file", "stealth", "control_workers", "lazy", "queue_timeout_s"}
+    {"browser", "engine", "profile", "state_file", "stealth", "control_workers", "lazy", "queue_timeout_s",
+     "unattached"}
 )
 _UNSET = object()
 
@@ -95,6 +112,7 @@ class WindowSpec:
     control_workers: int = 2
     lazy: bool = True
     queue_timeout_s: float = CONTROL_QUEUE_TIMEOUT_S
+    unattached: bool = False  # native Chrome with no Playwright and no CDP websocket while idle
 
     def __post_init__(self):
         n = self.name
@@ -128,6 +146,21 @@ class WindowSpec:
         elif stealth and self.browser in ("firefox", "webkit"):
             raise ConfigError(f"window {n}: stealth applies to Chromium-family browsers only")
         object.__setattr__(self, "stealth", stealth)
+        if not isinstance(self.unattached, bool):
+            raise ConfigError(f"window {n}: unattached must be a boolean")
+        if self.unattached:
+            if self.browser != "chrome":
+                raise ConfigError(
+                    f"window {n}: unattached needs browser 'chrome' (the service launches native Chrome without Playwright)"
+                )
+            if stealth:
+                raise ConfigError(
+                    f"window {n}: unattached cannot use stealth (stealth patches a context at launch, which needs an attachment)"
+                )
+            if self.state_file is not None:
+                raise ConfigError(
+                    f"window {n}: unattached cannot use state_file (its cookies are added through an attachment at launch)"
+                )
         object.__setattr__(self, "profile", Path(self.profile).expanduser().resolve())
         if self.state_file is not None:
             object.__setattr__(self, "state_file", Path(self.state_file).expanduser().resolve())
@@ -146,6 +179,8 @@ class WindowSpec:
         out += ["fetch", "cookies", "snapshot"]
         if self.has_cdp:
             out.append("mhtml")
+        if self.unattached:
+            out.append("unattached")
         return out
 
 
@@ -175,7 +210,7 @@ def _parse_spec(name: str, raw) -> WindowSpec:
             raise ConfigError(f"window {name!r}: {key} must be a string")
     kwargs = {
         k: raw[k]
-        for k in ("browser", "engine", "stealth", "control_workers", "lazy", "queue_timeout_s")
+        for k in ("browser", "engine", "stealth", "control_workers", "lazy", "queue_timeout_s", "unattached")
         if k in raw
     }
     return WindowSpec(
@@ -332,10 +367,11 @@ class _Launch:
     def abort(self) -> None:
         """Owner thread: undo a failed launch."""
         self.close_browser()
-        try:
-            self.pw.stop()
-        except Exception:  # noqa: BLE001
-            pass
+        if self.pw is not None:
+            try:
+                self.pw.stop()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _require_engine_files(spec: WindowSpec) -> None:
@@ -404,6 +440,18 @@ def _launch_chrome(launch: _Launch) -> None:
     launch.browser_pid = proc.pid
 
 
+def _launch_unattached(launch: _Launch) -> None:
+    """Native Chrome with no Playwright and no CDP websocket: the process, its
+    proven endpoint and an HTTP-only owner runtime. The command line is the
+    plain native unit (``profiles._start_native``): no KeePassXC extension,
+    no automation flags; only headless for isolated runs."""
+    spec = launch.spec
+    proc, cdp = profiles.launch_native_process(spec.profile, extra_args=["--headless=new"] if _headless() else [])
+    launch.proc, launch.cdp, launch.browser_pid = proc, cdp, proc.pid
+    endpoint = urlsplit(cdp)
+    launch.runtime = HttpRuntime(window=spec.name, port=endpoint.port, browser_path=endpoint.path, proc=proc)
+
+
 def _launch_other(launch: _Launch) -> None:
     spec = launch.spec
     browser_type = getattr(launch.pw, spec.browser)
@@ -445,19 +493,25 @@ def _setup_context(spec: WindowSpec, context) -> None:
 
 def launch_browser(spec: WindowSpec) -> _Launch:
     """Launch ``spec``'s browser on the calling thread (which becomes the
-    owner of its Playwright). Cleans up after itself on failure."""
-    from playwright.sync_api import sync_playwright
-
+    owner of its Playwright, except for an unattached window, which has none).
+    Cleans up after itself on failure."""
     _require_engine_files(spec)
-    pw = sync_playwright().start()
-    launch = _Launch(spec, pw)
+    if spec.unattached:
+        launch = _Launch(spec, None)
+    else:
+        from playwright.sync_api import sync_playwright
+
+        launch = _Launch(spec, sync_playwright().start())
     try:
-        {"chromium": _launch_chromium, "chrome": _launch_chrome}.get(spec.browser, _launch_other)(launch)
-        _setup_context(spec, launch.context)
-        launch.runtime = Runtime(
-            window=spec.name, engine=spec.engine, kind=spec.browser, pw=pw,
-            browser=launch.browser, context=launch.context, cdp=launch.cdp, role="owner",
-        )
+        if spec.unattached:
+            _launch_unattached(launch)
+        else:
+            {"chromium": _launch_chromium, "chrome": _launch_chrome}.get(spec.browser, _launch_other)(launch)
+            _setup_context(spec, launch.context)
+            launch.runtime = Runtime(
+                window=spec.name, engine=spec.engine, kind=spec.browser, pw=launch.pw,
+                browser=launch.browser, context=launch.context, cdp=launch.cdp, role="owner",
+            )
         return launch
     except BaseException as exc:
         launch.abort()
@@ -475,11 +529,18 @@ _STARTING, _RUNNING, _STOPPING, _STOPPED = "starting", "running", "stopping", "s
 
 
 class _Lanes:
-    def __init__(self, launch: _Launch, spec: WindowSpec):
+    def __init__(self, launch: _Launch, spec: WindowSpec, window: "Window | None" = None):
         self.deadlines = Deadlines(spec.name)
         make = launch.make_worker_runtime
-        self.short = Lane(f"{spec.name}-ctl", spec.control_workers, make, self.deadlines, keep=1)
-        self.long = Lane(f"{spec.name}-long", spec.control_workers, make, self.deadlines, keep=0)
+        if spec.unattached:
+            if window is None:
+                raise ValueError("lanes of an unattached window need the window that gates their attachments")
+            gate = (window._enter_worker, window._leave_worker)
+            self.short = TransientLane(f"{spec.name}-ctl", spec.control_workers, make, self.deadlines, *gate)
+            self.long = TransientLane(f"{spec.name}-long", spec.control_workers, make, self.deadlines, *gate)
+        else:
+            self.short = Lane(f"{spec.name}-ctl", spec.control_workers, make, self.deadlines, keep=1)
+            self.long = Lane(f"{spec.name}-long", spec.control_workers, make, self.deadlines, keep=0)
 
     def submit(self, fn, long: bool, queue_timeout: float | None) -> cf.Future:
         return (self.long if long else self.short).submit(fn, queue_timeout)
@@ -542,7 +603,7 @@ class _Owner(threading.Thread):
             self.launch = launch
             self.cdp = launch.cdp
             if launch.cdp is not None:
-                self.lanes = _Lanes(launch, w.spec)
+                self.lanes = _Lanes(launch, w.spec, w)
             self.phase = _RUNNING
         log.info("window %s running (generation %d, cdp %s)", w.spec.name, w._generation, self.cdp)
         self.ready.set()
@@ -619,6 +680,8 @@ class Window:
         self._generation = 0
         self._closed = False
         self._pages_cache: list[dict] = []
+        self._quiet: str | None = None  # client id holding the quiet reservation; guarded by _lock
+        self._workers = 0  # attached service workers, across generations; guarded by _lock
 
     def __repr__(self) -> str:
         return f"<Window {self.spec.name} {'running' if self.running else 'stopped'} gen={self._generation}>"
@@ -700,7 +763,88 @@ class Window:
             "cdp": self.cdp if running else None,
             "pages": pages if running else [],
             "queue_timeout_s": self.spec.queue_timeout_s,
+            "unattached": self.spec.unattached,
         }
+
+    # quiet reservation (unattached windows)
+    def _quiet_error(self) -> ServiceError:
+        return ServiceError("busy", f"window {self.spec.name} is reserved for an unattached client", 409)
+
+    def begin_unattached(self, client_id: str) -> None:
+        """Reserve this window for one quiet client, or raise.
+
+        ``unsupported_offer`` (409) when the window is not unattached; ``busy``
+        (409) when another reservation exists, a service worker is attached
+        (service operation in progress), or a connection to the browser's
+        debugging port exists that the service did not make: a raw or revoked
+        client. The reservation is made first, under the window lock, so no
+        worker can attach while the connection check runs on the HTTP owner
+        (serialised with the owner's own requests); a failed check removes it.
+        A window that is not running has no clients. A raw CDP client that
+        connects after the reservation cannot be refused (see ``unattached.py``).
+        """
+        if not self.spec.unattached:
+            raise ServiceError("unsupported_offer", f"window {self.spec.name} does not offer unattached", 409)
+        with self._lock:
+            if self._quiet is not None:
+                raise self._quiet_error()
+            if self._workers:
+                raise ServiceError(
+                    "busy",
+                    f"window {self.spec.name} has {self._workers} active service worker attachment(s) "
+                    f"(a service operation is in progress)",
+                    409,
+                )
+            self._quiet = client_id
+        try:
+            self._assert_no_clients()
+        except BaseException:
+            self.end_unattached(client_id)
+            raise
+
+    def _assert_no_clients(self) -> None:
+        with self._lock:
+            owner = self._owner
+        if owner is None:
+            return  # never launched: no endpoint exists
+        if owner.phase == _STARTING:
+            owner.ready.wait(LAUNCH_TIMEOUT_S)
+            if owner.phase == _STARTING:
+                raise ServiceError("busy", f"window {self.spec.name} is still launching its browser", 409)
+        fut = self._submit_owner(lambda rt: rt.assert_no_clients(), launch=False)
+        try:
+            fut.result(timeout=CLIENT_CHECK_WAIT_S)
+        except cf.TimeoutError:
+            fut.cancel()
+            raise ServiceError("busy", f"window {self.spec.name}: its owner did not answer the attachment check", 409) from None
+        except ServiceError as exc:
+            if exc.code != "window_stopped":
+                raise  # a stopped window has no browser, hence no clients
+
+    def end_unattached(self, client_id: str) -> None:
+        """Drop the quiet reservation of ``client_id``. Idempotent; another
+        client's reservation is left alone."""
+        with self._lock:
+            if self._quiet == client_id:
+                self._quiet = None
+
+    def assert_attach_allowed(self) -> None:
+        """``busy`` (409) while a quiet reservation exists."""
+        with self._lock:
+            if self._quiet is not None:
+                raise self._quiet_error()
+
+    def _enter_worker(self) -> None:
+        """Gate before a worker attaches: refuse under a reservation, else count it."""
+        with self._lock:
+            if self._quiet is not None:
+                raise self._quiet_error()
+            self._workers += 1
+
+    def _leave_worker(self) -> None:
+        """Called once a worker's Playwright is stopped (never from a caller's future)."""
+        with self._lock:
+            self._workers -= 1
 
     # worker jobs
     def _lanes(self) -> _Lanes | None:
@@ -713,11 +857,19 @@ class Window:
         ``queue_timeout`` bounds the wait for a free worker (``busy``, 503);
         omitted, it is the window's configured ``queue_timeout_s``; an explicit
         value, including ``None`` (no deadline), is passed through unchanged.
-        Windows without CDP run it on the owner thread instead."""
+        Windows without CDP run it on the owner thread instead. On an
+        unattached window each job gets a temporary attachment, stopped before
+        the future completes, and is refused (``busy``, 409) while a quiet
+        reservation exists."""
         if queue_timeout is _UNSET:
             queue_timeout = self.spec.queue_timeout_s
         if not self.spec.has_cdp:
             return self.owner(fn)
+        if self.spec.unattached:
+            try:
+                self.assert_attach_allowed()
+            except ServiceError as exc:
+                return _closed_future(exc)
         lanes = self._lanes()
         if lanes is not None:
             return lanes.submit(fn, long, queue_timeout)

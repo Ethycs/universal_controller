@@ -144,3 +144,22 @@ PBX 210-1001 reported native harvest sources failing with `profile_held` after t
 - Public page-opening methods and their popups are client-owned. Exit closes those tabs and disconnects; unrelated tabs/context/browser survive. Connection errors name the endpoint; there is no local-launch fallback.
 - Verification: `pixi run --frozen -e dev pytest -q tests/test_cdp_attachment.py tests/test_service_client.py` — **96 passed in 41.83 s**. Disposable Chromium proved interception, local text controls, caller-close, popup cleanup, failed-navigation cleanup, unrelated tabs opened before/during attachment, and reattachment to the surviving browser.
 - No extension sources changed. No service/proxy restart, event_tool edit, signed-in profile access or port-9222 connection was made. Real erobay/ra-sf access and Cloudflare clearance are **unverified** here; consumer pin/routing and the live check remain with PBX 210-1001.
+
+## 12. 2026-11-24 native-only service migration
+
+Owner selected **native-only** scope: service ownership, quiet loading, consumer cutover and live verification. Standard harvest, generic/health migration and the separately requested Grok network exposure are outside this authorization.
+
+Implementation:
+- `unattached: true` native windows own plain Chrome with an HTTP-only owner/reaper; no startup Playwright, context scripts, cookie import, stealth or extension flags.
+- Explicit quiet client registration, URL creation and fresh title/URL metadata. Readiness is entirely consumer-side. Temporary workers preserve HTTP offers and detach before completion.
+- Registered holder labels, active workers and existing endpoint sockets block quiet admission. Unreadable socket state fails closed. Revocation does not pretend an abandoned live CDP connection has disconnected.
+- Consumer teardown disconnects before lease release; persistent site sessions cannot target quiet-native windows. Grok's existing window/configuration remains ordinary.
+- The deployed native configuration is planned with `engine: none`, preserving the peer's measured fallback path. Optional page-local injection is tested but is not the chosen site-access method.
+
+Verification: **316 passed in 82.08 s**:
+```bash
+pixi run --frozen -e dev pytest -q tests/test_service_unattached_owner.py tests/test_service_unattached_api.py tests/test_service_native_migration.py tests/test_service_windows_core.py tests/test_service_api.py tests/test_service_client.py tests/test_service_fetch.py tests/test_service_targets.py tests/test_service_sessions.py tests/test_cdp_attachment.py
+```
+Real disposable Chrome proved quiet title/URL loading (including encoded URL delimiters), zero established debugging-port connections during quiet operations, transient control/cookie attachment cleanup, rejection of a still-attached revoked client, process-death lease cleanup and continued browser ownership. Other checks covered bounded worker races and existing service/Grok-session contracts. No production native profile or port 9222 was touched by these checks.
+
+Deployment is **pending** the announced consumer-owner sequence: pin and test, confirm no job, stop the old native unit, transfer profile ownership, then verify erobay and ra-sf through the actual harvest service. Do not infer a live migration or real-site pass from the isolated tests.

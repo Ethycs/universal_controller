@@ -81,6 +81,18 @@ This is direct attachment, not a service window or a native launch. UC never sel
 
 **Verification:** `pixi run --frozen -e dev pytest -q tests/test_cdp_attachment.py tests/test_service_client.py` uses disposable headless Chromium profiles and loopback fixture pages, never port 9222 or signed-in profiles. Real-site clearance after attachment remains **unverified**; CDP attachment itself can affect bot checks.
 
+### 5.2 Service-owned native window
+
+Configure the native profile with `browser: chrome`, `unattached: true`, `engine: none`, `stealth: false`, no `state_file` (Build Spec §2). This preserves the measured plain-Chrome method: the service launches and owns it, but owner/reaper/page metadata use HTTP only. A fresh explicit nonzero debugging port replaces the old fixed 9222 endpoint; consumers name the service/window, not that port.
+
+Native consumers register an `unattached=True` client, create a leased page at the source URL, poll `page_info` and apply their own readiness rule. Close the preparation page/client in `finally`; only after readiness succeeds attach with `UCBrowser(service=..., window="native", label=...)`. Busy admission is an error, not permission to attach or launch another browser. Error details name registered holders or remaining endpoint connections. A long-running native explore session prevents every quiet preparation on that window until it disconnects.
+
+**Operator cutover:** publish the tested UC commit; the consumer owner pins it and tests every native route. Confirm no harvest or native client is active, then the owner stops `uc-native-window`. Back up the closed profile and private service config, add the native window without changing Grok, and restart UC only when Grok has no active operations. Start `native`, then switch consumer configuration and run each native source through its real handler. Disable the old unit only after those source checks pass. On rollback, stop UC's native process before restoring the old unit; never run two owners of the profile.
+
+Production requires the desktop's `DISPLAY`/`XAUTHORITY`. Screen blanking was correlated with failed checks in peer runs; do not treat an awake screen as a guarantee of passing. No proxy/network changes are needed.
+
+**Verification:** `pixi run --frozen -e dev pytest -q tests/test_service_unattached_owner.py tests/test_service_unattached_api.py tests/test_service_native_migration.py`. The real-browser case uses a disposable headless profile and loopback page; it does not prove real-site clearance. Record deployed source states and counts separately from this test result.
+
 ## 6. Grok proxy and service deployment
 
 `systemd/uc-service.service` and `systemd/uc-grok-proxy.service` are Linux user-unit templates for an independent checkout at `~/universal_controller`. The service alone owns the signed-in browser; the Grok-only proxy uses `grok-proxy.config.yaml`, exposing the existing `uc-grok` and `grok-browser` model names on loopback port 4000.

@@ -257,10 +257,22 @@ class ServiceClient:
     def start_window(self, window: str) -> dict:
         return self.request("POST", _path("windows", window, "start"), timeout=None)
 
-    def register_client(self, window: str, label: Optional[str] = None, pid: Optional[int] = None) -> str:
+    def register_client(
+        self,
+        window: str,
+        label: Optional[str] = None,
+        pid: Optional[int] = None,
+        *,
+        unattached: bool = False,
+    ) -> str:
+        """``unattached=True`` asks for a quiet reservation: the service
+        refuses it while any other client is registered on the window, and no
+        Playwright attaches to the window until the client is closed."""
         body: dict = {"pid": os.getpid() if pid is None else pid, "window": window}
         if label:
             body["label"] = label
+        if unattached:
+            body["unattached"] = True
         return self.request("POST", "/clients", body)["client_id"]
 
     def close_client(self, client_id: str) -> dict:
@@ -284,6 +296,12 @@ class ServiceClient:
         if wait_ms is not None:
             body["wait_ms"] = wait_ms
         return self.request("POST", _path("windows", window, "pages"), body)["target_id"]
+
+    def page_info(self, window: str, target_id: str) -> dict:
+        """``{target_id, url, title, age_s}`` for one page, read from DevTools
+        metadata without launching or attaching. 404 ``no_such_target`` when
+        absent."""
+        return self.request("GET", _path("windows", window, "pages", target_id))
 
     def close_page(self, window: str, target_id: str) -> dict:
         return self.request("DELETE", _path("windows", window, "pages", target_id))

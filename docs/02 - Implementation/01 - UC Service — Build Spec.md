@@ -48,7 +48,7 @@ Read once at service start from `UC_WINDOWS_FILE` (default `data/windows.json`).
   "windows": {
     "harvest": {"browser": "chromium", "engine": "extension", "profile": "data/.uc_chromium_profile", "state_file": "data/.playwright_state.json"},
     "grok":    {"browser": "chromium", "engine": "extension", "profile": "data/.grok/.uc_chromium_profile"},
-    "native":  {"browser": "chrome",   "engine": "inject",    "profile": "data/.uc_chrome_profile"}
+    "native":  {"browser": "chrome", "engine": "none", "profile": "data/.uc_chrome_profile", "unattached": true, "stealth": false}
   },
   "sites": {
     "grok": {"window": "grok", "folder": "NSFW", "folder_url": "https://grok.com/project/<project-id>", "max_sessions": 4, "max_concurrent_sends": 1, "session_idle_s": 1800}
@@ -68,6 +68,7 @@ Read once at service start from `UC_WINDOWS_FILE` (default `data/windows.json`).
 | `control_workers` | int, default 2 | maximum workers in each of the separate short and long lanes; workers start lazily |
 | `queue_timeout_s` | positive finite number, default 30 | worker admission deadline in seconds for each lane; exposed in window discovery so clients can include it in finite read budgets |
 | `lazy` | bool, default `true` | launch on first use rather than at service start |
+| `unattached` | bool, default `false`; `chrome` only | HTTP-only owner with no idle CDP/Playwright connection. Disallows `stealth: true` and `state_file`. Work attaches transiently; clients may reserve a quiet loading interval |
 
 **Sites**
 
@@ -79,9 +80,11 @@ Read once at service start from `UC_WINDOWS_FILE` (default `data/windows.json`).
 | `session_idle_s` | 1800 | an idle session older than this is closed; its map entry stays |
 | `folder`, `folder_url` | unset | optional Grok project restriction; the deployed Grok adapter requires the existing `NSFW` project's name and canonical URL. Verify identity and membership rather than silently using the account home |
 
-The example is not permission to open arbitrary existing profiles. Tasks 0–5 used fresh profiles. For the authorized Grok migration the service config lives at `~/.config/universal-controller/windows.json` and keeps the existing signed-in profile at `/home/rabbit/event_tool/data/.grok/.uc_chromium_profile`. Stop its old owner before launch. Do not supply a stale `state_file` over the current account cookies. Native Chrome and port 9222 are not part of this migration.
+The example is not permission to open arbitrary existing profiles. Tasks 0–5 used fresh profiles. Deployment config lives at `~/.config/universal-controller/windows.json`. Grok retains `/home/rabbit/event_tool/data/.grok/.uc_chromium_profile`; the authorized native-only cutover retains `/home/rabbit/event_tool/data/.uc_chrome_profile`. Stop the previous owner before launch; never adopt its process. Do not supply stale `state_file` cookies. Native deployment uses `engine: none` to preserve the measured fallback path; the status report records whether the consumer cutover is live.
 
 Only `grok` is currently a supported configured site. Persistent named-session URLs and last-use times live in `UC_SESSIONS_FILE` (default `data/sessions.json`); the deployed unit selects `~/.local/state/universal-controller/sessions.json`. No messages or cookies are stored in this map.
+
+Persistent site sessions cannot target an `unattached` window: their retained CDP attachments conflict with quiet loading. Grok stays on its existing ordinary window.
 
 ## 3. Wire contract (v0)
 
@@ -91,17 +94,26 @@ HTTP on the status server's port (`UC_STATUS_PORT`, default 4010). JSON in, JSON
 
 | Method and path | Body | Returns | Errors |
 |---|---|---|---|
-| `GET /windows` | — | `{name: {browser, engine, running, offers, cdp, queue_timeout_s, clients: n, pages: [{target_id, url, holder, age_s}]}}`. `offers` lists `attach`, `control`, `fetch`, `cookies`, `snapshot`, `mhtml` as supported. `cdp` is the browser websocket endpoint or `null`. `holder` is a client id, `session:<site>/<id>` for site pages, or `null` | — |
+| `GET /windows` | — | `{name: {browser, engine, running, offers, cdp, unattached, queue_timeout_s, clients: n, pages: [{target_id, url, title?, holder, age_s}]}}`. `offers` lists supported techniques, including `unattached` on flagged windows. `cdp` is the browser websocket endpoint or `null`. Quiet-native page metadata includes `title`. `holder` is a client id, `session:<site>/<id>` or `null` | — |
 | `POST /windows/{w}/start` | — | the window's entry, launched if it was not | 404 `no_such_window`; 409 `profile_held` (a browser the service did not launch holds the profile); 500 `launch_failed` |
-| `POST /clients` | `{pid, label, window}` | `{client_id}` | 400 `bad_pid`; 404 `no_such_window` |
+| `POST /clients` | `{pid, label, window, unattached?: false}` | `{client_id}`; `unattached: true` reserves a quiet interval, not a CDP attachment | 400 `bad_pid`; 404 `no_such_window`; 409 `unsupported_offer` or `busy` |
 | `DELETE /clients/{id}` | — | `{closed: n}` — closes every page leased to the client (E9) | 404 `no_such_client` |
 | `DELETE /clients?label=<label>` | — | `{clients: n, closed: n}` — revocation (E10). Zero matches is not an error | — |
-| `POST /windows/{w}/pages` | `{client_id, url?, wait_ms?}` | `{target_id}` — a page leased to the client; blank unless `url` is given, in which case the service navigates it. `url` exists for callers that hold no browser library | 404 `no_such_window` / `no_such_client`; 502 `navigation_failed` |
+| `POST /windows/{w}/pages` | `{client_id, url?, wait_ms?}` | `{target_id}` — leased to the client. Ordinary clients get the existing navigation behavior. A quiet client opens `url` through DevTools HTTP only and must use zero/omitted `wait_ms`; the caller polls metadata and decides readiness | 404 `no_such_window` / `no_such_client`; 502 `navigation_failed` / `devtools_failed`; 400 `wait_unsupported` |
 | `DELETE /windows/{w}/pages/{t}` | — | `{closed: true}` | 404 `no_such_target`; 500 `close_failed` if the browser explicitly refuses target closure |
+| `GET /windows/{w}/pages/{t}` | — | fresh owner metadata for the target; quiet-native entries contain `{target_id, url, title, age_s}`. Never launches or attaches | 404 `no_such_target`; 503 `window_stopped`; 502 `devtools_failed` on unavailable/malformed native metadata |
 | `POST /windows/{w}/cookies` | `{cookies: [...]}` in Playwright format, or `{from_chrome: ["grok.com", ...]}` | `{added: n}` (E13, G15) | 404 `no_such_window`; 501 `chrome_cookies_unavailable` if `rookiepy` is not installed |
 | `GET /windows/{w}/cookies?domain=<d>` | — | `{cookies: [...]}` for that domain, for a caller that will make plain HTTP requests with the window's session | 404 `no_such_window`; 400 `domain_required` |
 | `POST /windows/{w}/fetch` | `{url, method?, headers?, body?, from?, stream?}`. Method defaults to GET. One retained page per (window, origin of `from` or `url`); first navigation uses `from`, else the origin root, and waits for `domcontentloaded`. Later same-origin `from` values become Fetch `referrer`, without navigation. Requests always use `credentials: 'include'`, subject to browser cookie/CORS/referrer policy | `{status, headers, body}`; with `stream: true`, newline-delimited `{"chunk": "<text>"}` lines then `{"status": n}`. Buffered and streamed requests share the retained page's exclusive lock; a changed `from` cannot navigate away from an in-flight request | 404 `no_such_window`; 502 `origin_unreachable` |
 | `POST /windows/{w}/pages/{t}/snapshot` | `{format: "png" \| "html" \| "mhtml", full_page?}` | `{data}` — base64 for `png`, text otherwise | 404 `no_such_target`; 409 `format_unsupported` (`mhtml` outside Chromium and Chrome) |
+
+### Quiet native loading
+
+The caller uses `ServiceClient.register_client(window, label=None, pid=None, *, unattached=True)`, then `new_page(window, client_id, url=...)`, `page_info(window, target_id)`, and `close_page` / `close_client` in `finally`. It alone interprets title/URL and decides whether to proceed. The service contains no bot-check detector or readiness predicate. After releasing the quiet client, it may construct ordinary `UCBrowser(service=url, window=window, label=...)`.
+
+A quiet reservation requires no other registered client and no active service attachment. `409 {"error":"busy","detail":...}` names registered labels/pids, active service work, or an existing external endpoint connection. Unknown socket state fails closed. A long-lived explore client therefore blocks quiet preparation until it disconnects. Queued worker jobs re-check admission before attaching. Cancellation and revocation do not falsely imply that a still-live connection has disappeared.
+
+On Linux the owner checks established endpoint sockets after reserving the window, serially with its own HTTP requests; just-disconnected sockets get up to two seconds to disappear. Raw clients already attached, including revoked clients that have not unwound, prevent reservation. **Boundary:** a raw client that deliberately connects to the published CDP endpoint *after* reservation cannot be prevented without a CDP proxy. Consumers must respect registration; the endpoint is not an isolation/security boundary.
 
 ### Controls
 
@@ -174,7 +186,7 @@ Selected by constructor arguments; no environment variable participates. This is
 | `open_with_intercept(…)` | same page creation and failure cleanup; routing and listeners stay local (E5). Both opening methods retain their public signatures; cleanup also applies in-process |
 | the 39 page-taking controls | read the page's target id; `POST …/controls/{name}`; return `result`, except callable orchestration described in §3 |
 | a control on an `engine: none` window | `UCBrowser` reads `offers` from the start response and runs the original body locally when `control` is absent, without a refusal round trip. Unexpected 409 `no_controls` still triggers and remembers the same fallback. Nested controls stay local under a scoped recursion guard. `ServiceClient` instead raises `ControlsUnavailable`. All 39 original outcomes were measured: `docs/08 - Analysis/01 - Engine-Absent Control Behavior.md` |
-| `close()` | `DELETE /clients/{id}`; disconnect. Never `context.close()` |
+| `close()` | Disconnect/stop the local Playwright first, then `DELETE /clients/{id}` to close leased pages. Never `context.close()`. If neither disconnect nor driver stop succeeds, retain registration rather than falsely permit quiet loading |
 | `client_id`, `label` | new read-only attributes |
 
 **Resolving a target id to a `Page`.** After `POST …/pages`, poll the real context's `pages`; for each page not yet known, open a CDP session, send `Target.getTargetInfo`, detach, and cache `target_id → Page`. Stop when the wanted id appears. *Measured:* 0.16–0.17 s (row 6). Allow 10 s, then raise. The reverse lookup for controls uses the same cache.
@@ -195,17 +207,21 @@ This path has no service registration, lease, sweep or revocation. Its label is 
 
 ## 5. Service internals
 
-**Owner thread, one per window.** Starts `sync_playwright()`, launches the browser, then loops on a job queue. Jobs: create a page, close pages, add cookies, relaunch. Between jobs it wakes every few seconds and makes one cheap Playwright call, which both detects a dead browser and drains queued events (gotcha 8).
+**Owner thread, one per window.** Ordinary windows start `sync_playwright()`, launch, then serve owner jobs and pump events periodically (gotcha 8). An `unattached` Chrome window instead has `HttpRuntime`: metadata/heartbeat via `/json/list` and `/json/version`, creation via `PUT /json/new`, closure via `/json/close`. No Playwright, browser websocket or context exists on that owner. Full URL encoding preserves `&`, fragments, percent escapes and Unicode; close responses are plain text. Metadata failures propagate, never become empty inventories.
 
 **Launching `chromium`.** The arguments `_start_chromium_ext` uses today, plus `--remote-debugging-port=0` and `--remote-debugging-address=127.0.0.1`. Then read `<profile>/DevToolsActivePort`: line 1 is the port, line 2 the browser path; the endpoint is `ws://127.0.0.1:<port><path>`. *Measured (row 1).* Read it with a short retry.
 
-**Launching `chrome`.** Use the shared `profiles.launch_native` subprocess path for both the service and in-process native mode. Select an available nonzero loopback port and pass it explicitly; port `0` makes installed Chrome report `navigator.webdriver=true` (PBX 210-1001, Chrome 157). Explicit-port Chrome does not write `DevToolsActivePort`: discover its browser websocket URL through `/json/version`, with positive proof that the endpoint belongs to this launch before attaching. A live child plus any answering URL is insufficient: another process can win the port-allocation/bind race. Keep the profile launch lock, prelaunch held-profile check and failure cleanup. A foreign listener must fail, never become the service's browser. Playwright `chromium` keeps its existing port-0 launch and stealth setup.
+**Launching `chrome`.** `profiles.launch_native` attaches for ordinary windows and in-process native mode; `profiles.launch_native_process` launches without attachment for an `unattached` window. Both share `_start_native` and its owned-process proof. Select an available nonzero loopback port and pass it explicitly; port `0` makes installed Chrome report `navigator.webdriver=true` (PBX 210-1001, Chrome 157). Explicit-port Chrome does not write `DevToolsActivePort`: discover the browser websocket through `/json/version`. A live child plus any answering URL is insufficient: another process can win the bind race. Keep the profile launch lock, held-profile check and failure cleanup. Playwright `chromium` retains its existing port-0 launch and stealth setup.
 
 The native proof is the exact random browser path announced by the launched child's own stderr (`DevTools listening on ws://127.0.0.1:<port>/devtools/browser/<id>`), matched by `/json/version`, with the child alive before and after discovery. Linux additionally checks socket ownership. A bounded-memory reader drains stderr for the browser's lifetime so logging cannot fill its pipe. A foreign address/path or bind failure returns `launch_failed` and stops this launch; there is no automatic port retry. This proof does not depend on `/proc`, but **Windows runtime remains unverified**.
 
-**Per-window setup**, on the owner, once, on the context: the API shim init script; `state_file` cookies; `Stealth().apply_stealth_sync(context)` if configured. *Measured (rows 3, 19):* both reach pages created later through any attachment.
+Unattached native launch adds no extension, KeePassXC, automation or window-size switches: only explicit debugging port/address, user-data-dir, no-first-run/no-default-browser-check and `about:blank`. `UC_SERVICE_HEADLESS` adds `--headless=new` only for isolated tests; production remains headed on `DISPLAY=:0`. Screen-blanking influence on the site check is peer-reported correlation, not a proven general cause.
+
+**Per-window setup**, for ordinary owners only: API shim init script, `state_file` cookies and configured stealth. An unattached owner performs none of these. `engine: inject` remains available for temporary worker controls, only on the addressed page; deployed native uses `none`. Injected engine signatures can use page-origin localStorage, so injection is not a promise of no persistent site data.
 
 **Control workers.** Each window has independent bounded short and long lanes, each capped by `control_workers`; every worker owns its Playwright/CDP attachment and unstarted local `UCBrowser` receiver. Jobs use the configured `queue_timeout_s` as an admission deadline, not an operation limit. Internal callers may explicitly pass `queue_timeout=None` to disable it. Firefox/WebKit have no CDP and execute jobs on their owner, without lane deadlines; long work there delays other operations. Those binaries were not installed or live-tested in this build.
+
+**Unattached workers.** Each short/long operation gets a temporary thread-affine Playwright attachment, fully stopped before its future completes. No idle driver is retained. Admission/counting spans browser generations; a cancelled caller or stuck old worker cannot release a live attachment's quiet-loading guard. Cookies and stream cancellation use workers too, never the HTTP-only owner. Persistent site sessions are rejected on these windows.
 
 **Ensuring the engine.** For `extension`: wait for `window.__UC.ready` as `_wait_ready` does. For `inject`: if `window.__UC` is absent, `page.evaluate(<bundle text>)`, then wait for ready. *Measured (row 22):* ready within 1.5 s; the check itself is one `evaluate`. Navigation discards the injected engine, so the check runs on every control call.
 
@@ -215,7 +231,7 @@ Blank/non-http extension pages are not injected or waited on by the preparation 
 
 **Long operations (E8).** `chat`, `scroll_feed` and fetch use the separate long lane, so short controls are not queued behind their waits. Site sends instead use their dedicated bounded session workers.
 
-**Leases and the reaper.** `clients: {client_id: (pid, start_time, label, window)}`, `leases: {(window, target_id): holder}`. Every 5 s, reap exited/reused pids and closed targets. On CDP windows, the owner enumerates page targets using browser-level `Target.getTargets` and closes them with `Target.closeTarget`, regardless of whether its Playwright context knows the Page. Non-page targets are excluded. Firefox/WebKit retain owner-thread Page enumeration/closure. The reaper uses fresh owner inventory, never `Window.info()`'s cached timeout/error fallback; failed enumeration preserves leases for a later pass. Cleanup jobs use `launch=False` so they cannot relaunch a stopped window. With zero registered clients, close unheld raw pages, preserving one blank page and service-owned fetch pages. Fetch pages display `holder: null` but are exempt from the raw-page sweep. Creation and lease assignment are atomic against revocation.
+**Leases and the reaper.** `clients: {client_id: (pid, start_time, label, window, unattached)}`, `leases: {(window, target_id): holder}`. Every 5 s, reap exited/reused pids and closed targets. Ordinary CDP owners use `Target.getTargets` / `Target.closeTarget`; unattached owners use DevTools HTTP only. Non-page targets are excluded. Firefox/WebKit retain owner Page enumeration. Fresh inventory is authoritative: failures preserve leases; cached status is never evidence of absence. Cleanup never relaunches a stopped window. With zero clients, close unheld raw pages while preserving one blank page and service-owned fetch pages. Creation/assignment is atomic against revocation. Quiet-client release also drops its reservation.
 
 **Relaunch.** If a window's browser disconnects: mark it not running, fail queued jobs, void its leases and sessions, stop its workers, relaunch on next use.
 

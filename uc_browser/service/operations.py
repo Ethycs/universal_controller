@@ -75,6 +75,17 @@ class FetchPage:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
+def _unattached(window) -> bool:
+    return bool(getattr(window.spec, "unattached", False))
+
+
+def _runtime_job(window, fn):
+    """Run a Playwright-touching ``fn`` where the window allows it. An
+    unattached window's owner holds no Playwright, so it takes a temporary
+    worker attachment; other windows keep the owner."""
+    return window.work(fn) if _unattached(window) else window.owner(fn)
+
+
 class Operations:
     def __init__(self, manager, leases):
         self.manager = manager
@@ -108,7 +119,7 @@ class Operations:
                 # Never include cookie material or upstream exception text.
                 raise ServiceError("chrome_cookies_unavailable", "Chrome cookie extraction failed", 501) from exc
         cookies = cookies or []
-        window.owner(lambda rt: rt.context.add_cookies(cookies)).result()
+        _runtime_job(window, lambda rt: rt.context.add_cookies(cookies)).result()
         return {"added": len(cookies)}
 
     def cookies(self, name: str, domain: str | None) -> dict:
@@ -123,7 +134,7 @@ class Operations:
                     if c["domain"].lower().lstrip(".") == domain
                     or (c["domain"].startswith(".")
                         and domain.endswith(c["domain"].lower()))]
-        return {"cookies": window.owner(job).result()}
+        return {"cookies": _runtime_job(window, job).result()}
 
     def snapshot(self, name: str, target: str, format: str, full_page: bool = False) -> dict:
         window = self.manager.get(name)
@@ -253,6 +264,6 @@ class Operations:
             if not future.done() and window.running:
                 # Another attachment can interrupt a pending fetch without
                 # touching the worker's Playwright objects across threads.
-                window.owner(lambda rt: rt.resolve(entry.target).evaluate(
+                _runtime_job(window, lambda rt: rt.resolve(entry.target).evaluate(
                     "token => window.__ucServiceFetches?.[token]?.abort()", token))
         return events, cancel, future
