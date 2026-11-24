@@ -193,4 +193,15 @@ pixi run --frozen -e dev pytest -q tests/test_service_page_lifetime.py tests/tes
 ```
 Disposable real Chrome covered release/revoke/process-death survival, subsequent quiet admission with zero sockets, explicit closure, reassignment to client cleanup, ownership refusal, invalid requests, navigation/resolution failures, and no restoration after browser termination/relaunch. No live profile was used in these checks.
 
-Deployment and optional consumer activation are pending. Retained tabs are still attached whenever any Playwright client/worker is connected to that window; retention alone does not attach.
+Service code `d855385` is deployed after the consumer owner confirmed no jobs or clients and reported event_tool `8832bb8`, **1964 passed with the same four unrelated failures**. Production HTTP-only verification promoted a blank tab, released its client, waited beyond the live five-second reaper, and found it retained with zero connections. A subsequent quiet reservation succeeded; explicit closure removed the retained tab. Native returned to zero clients/one blank page; Grok's named-session map survived and the proxy was not restarted.
+
+Consumer activation and live replacement verification **passed**, reported by PBX 210-1001 at 18:58 UTC. `keep_page_open` is enabled on erobay only. The restarted native browser (PID `1968729`) was drawn according to the consumer's own check.
+
+| Run | Quiet preparation | Extraction | Retention result |
+|---|---|---|---|
+| 18:55:06 UTC | Human checkbox click; through at 23 s | 273 messages | Promoted preparation tab survived client exit, attachment and repeated reaper passes; zero clients, one retained erobay tab plus blank |
+| 18:57:12 UTC | Through in 1 s, no checkbox | 273 messages | New tab promoted, old same-host retained tab explicitly closed; still exactly one retained erobay tab plus blank 12 s later |
+
+No unexpected busy response, leased-page leak or lifetime warning was reported. This proves optional retention and consumer replacement, **not** longer-lived clearance. Whether keeping the tab open extends the site's clearance is unverified; the next scheduled harvest is the first observation. Do not restart the service/native window merely to recheck it: restart intentionally ends this retained tab.
+
+Retained tabs are still attached whenever any Playwright client/worker is connected to that window; retention alone does not attach. No network exposure, Grok prompt, automatic mapping/focus or restart-restoration feature was added.
