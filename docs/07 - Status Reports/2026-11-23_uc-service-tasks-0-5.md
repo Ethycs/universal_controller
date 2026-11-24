@@ -154,7 +154,7 @@ Implementation:
 - Explicit quiet client registration, URL creation and fresh title/URL metadata. Readiness is entirely consumer-side. Temporary workers preserve HTTP offers and detach before completion.
 - Registered holder labels, active workers and existing endpoint sockets block quiet admission. Unreadable socket state fails closed. Revocation does not pretend an abandoned live CDP connection has disconnected.
 - Consumer teardown disconnects before lease release; persistent site sessions cannot target quiet-native windows. Grok's existing window/configuration remains ordinary.
-- The deployed native configuration is planned with `engine: none`, preserving the peer's measured fallback path. Optional page-local injection is tested but is not the chosen site-access method.
+- Native is deployed with `engine: none`, preserving the peer's measured fallback path. Optional page-local injection is tested but is not the chosen site-access method.
 
 Verification: **316 passed in 82.08 s**:
 ```bash
@@ -162,4 +162,21 @@ pixi run --frozen -e dev pytest -q tests/test_service_unattached_owner.py tests/
 ```
 Real disposable Chrome proved quiet title/URL loading (including encoded URL delimiters), zero established debugging-port connections during quiet operations, transient control/cookie attachment cleanup, rejection of a still-attached revoked client, process-death lease cleanup and continued browser ownership. Other checks covered bounded worker races and existing service/Grok-session contracts. No production native profile or port 9222 was touched by these checks.
 
-Deployment is **pending** the announced consumer-owner sequence: pin and test, confirm no job, stop the old native unit, transfer profile ownership, then verify erobay and ra-sf through the actual harvest service. Do not infer a live migration or real-site pass from the isolated tests.
+Deployment handoff: PBX 210-1001 reported event_tool `e575802`, pin `5f55401`, **1954 passed with the same four unrelated failures**, and no running/queued job. It stopped `uc-native-window` at 17:54 UTC. The UC session confirmed no live profile holder, privately backed up the closed profile, and added only the native window to `~/.config/universal-controller/windows.json`.
+
+UC restarted and launched native PID `1941470`. Production proof: quiet registration → start → blank page → metadata → close/release passed; headed `navigator.webdriver` was `false`, no engine was present, and attachment teardown left zero clients/connections and one blank page. Grok config/sites were unchanged, its `uc-migration-smoke` mapping survived, and the proxy was not restarted. Backups are private under `~/.local/state/universal-controller/backups/native-20261124T1747/`.
+
+At 17:57 UTC, PBX 210-1001 activated `WEB_UC_NATIVE_WINDOW=native`, restarted the consumer and began live checks. At 18:25 UTC it confirmed the cutover and disabled the old `uc-native-window` unit, retaining its file for rollback.
+
+Live results reported by the consumer owner:
+
+| Source | Route | Result | Messages | Conditions |
+|---|---|---|---:|---|
+| erobay | `service:native` | ok, 18:20:32 UTC | 273 | Human clicked the Cloudflare checkbox; quiet preparation passed at 24 s, then the client attached, fetched and detached |
+| ra-sf | `service:native` | ok, 18:22:38 UTC | 20 | 81 s; window mapped/on top in every 20 s sample |
+
+The first ra-sf run timed out at 1200 s with the window later found iconified. Revocation closed five pages for one client and left the window clean. One run with each visibility condition is correlation, **not proof of cause**. UC's launcher/service and `browser.py` contain no minimize/iconify/unmap call; no automatic visibility restoration was added.
+
+Final UC-side check: native running, zero clients, one blank page, zero established debugging-port connections; old unit inactive and disabled. Grok proxy remains a separate HTTP endpoint, not dependent on Grok MCP tools.
+
+Migration is complete. Optional tab/window persistence was subsequently authorized as separate follow-on work; the current reaper still closes unheld pages and no persistence behavior is claimed here.

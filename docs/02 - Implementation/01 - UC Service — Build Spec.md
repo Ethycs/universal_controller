@@ -109,7 +109,7 @@ HTTP on the status server's port (`UC_STATUS_PORT`, default 4010). JSON in, JSON
 
 ### Quiet native loading
 
-The caller uses `ServiceClient.register_client(window, label=None, pid=None, *, unattached=True)`, then `new_page(window, client_id, url=...)`, `page_info(window, target_id)`, and `close_page` / `close_client` in `finally`. It alone interprets title/URL and decides whether to proceed. The service contains no bot-check detector or readiness predicate. After releasing the quiet client, it may construct ordinary `UCBrowser(service=url, window=window, label=...)`.
+The caller uses `ServiceClient.register_client(window, label=None, pid=None, *, unattached=True)`, then `start_window(window)`, `new_page(window, client_id, url=...)`, `page_info(window, target_id)`, and `close_page` / `close_client` in `finally`. Starting a lazy window inside its quiet reservation is supported. The caller alone interprets title/URL and decides readiness; the service contains no bot-check detector. After releasing the quiet client, it may construct ordinary `UCBrowser(service=url, window=window, label=...)`.
 
 A quiet reservation requires no other registered client and no active service attachment. `409 {"error":"busy","detail":...}` names registered labels/pids, active service work, or an existing external endpoint connection. Unknown socket state fails closed. A long-lived explore client therefore blocks quiet preparation until it disconnects. Queued worker jobs re-check admission before attaching. Cancellation and revocation do not falsely imply that a still-live connection has disappeared.
 
