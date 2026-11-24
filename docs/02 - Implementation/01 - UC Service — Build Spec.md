@@ -12,7 +12,7 @@ The design doc decides the shape. This doc is what to type: files, config, the w
 1. A Playwright object is touched only from the thread whose Playwright instance produced it. Never from an HTTP handler.
 2. The service binds `127.0.0.1`. So does every browser's debugging port.
 3. In service mode the client library never closes a context, adds a context-level init script or launches a browser. An in-process launch refuses a profile already held by a live browser.
-4. Routing is explicit. `UCBrowser(service=url, window=name)` selects a service window; the caller names both and neither side infers. `service` omitted or `None` means in-process, regardless of `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` or `UC_CLIENT_LABEL`, which no longer exist as configuration. Intentional safety exception: native launch now uses port 0 and refuses held profiles instead of attaching to port 9222.
+4. Routing is explicit. `UCBrowser(service=url, window=name)` selects a service window; the caller names both and neither side infers. `service` omitted or `None` means in-process, regardless of `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` or `UC_CLIENT_LABEL`, which no longer exist as configuration. Intentional safety exception: native launch uses a dynamically selected explicit loopback port and refuses held profiles instead of attaching to fixed port 9222.
 5. The service never attaches to a browser it did not launch.
 
 ## 1. Layout
@@ -178,7 +178,9 @@ Pump Playwright events **before** snapshotting `context.pages`; reading that pro
 
 **Launching `chromium`.** The arguments `_start_chromium_ext` uses today, plus `--remote-debugging-port=0` and `--remote-debugging-address=127.0.0.1`. Then read `<profile>/DevToolsActivePort`: line 1 is the port, line 2 the browser path; the endpoint is `ws://127.0.0.1:<port><path>`. *Measured (row 1).* Read it with a short retry.
 
-**Launching `chrome`.** The subprocess `_start_native_chrome` starts today, with port `0` in place of the fixed `9222`; the owner then attaches with `connect_over_cdp`. *Measured (row 20).* Before launching, check that the process the service started is the one answering: if the subprocess exits at once, another Chrome holds the profile — fail with `profile_held` (constraint 5; Analysis §5).
+**Launching `chrome`.** Use the shared `profiles.launch_native` subprocess path for both the service and in-process native mode. Select an available nonzero loopback port and pass it explicitly; port `0` makes installed Chrome report `navigator.webdriver=true` (PBX 210-1001, Chrome 157). Explicit-port Chrome does not write `DevToolsActivePort`: discover its browser websocket URL through `/json/version`, with positive proof that the endpoint belongs to this launch before attaching. A live child plus any answering URL is insufficient: another process can win the port-allocation/bind race. Keep the profile launch lock, prelaunch held-profile check and failure cleanup. A foreign listener must fail, never become the service's browser. Playwright `chromium` keeps its existing port-0 launch and stealth setup.
+
+The native proof is the exact random browser path announced by the launched child's own stderr (`DevTools listening on ws://127.0.0.1:<port>/devtools/browser/<id>`), matched by `/json/version`, with the child alive before and after discovery. Linux additionally checks socket ownership. A bounded-memory reader drains stderr for the browser's lifetime so logging cannot fill its pipe. A foreign address/path or bind failure returns `launch_failed` and stops this launch; there is no automatic port retry. This proof does not depend on `/proc`, but **Windows runtime remains unverified**.
 
 **Per-window setup**, on the owner, once, on the context: the API shim init script; `state_file` cookies; `Stealth().apply_stealth_sync(context)` if configured. *Measured (rows 3, 19):* both reach pages created later through any attachment.
 
@@ -210,6 +212,7 @@ Blank/non-http extension pages are not injected or waited on by the preparation 
 8. **A launching connection that makes no calls does not process events.** This produced the apparent missing page in row 11: a pump before enumeration fixed the exact target sets. Page-taking APIs still need pumping. Lease maintenance now uses browser-authoritative CDP target enumeration/closure, not the owner's Page list or cached status. Multi-day idle behavior remains unverified.
 9. **Each browser-touching thread costs a Playwright driver.** Measured PSS: 117 MB in the independent baseline and 77 MB in the live-service run. At default caps, up to five drivers per active window (owner + two short + two long), before future site sessions. Size pools deliberately.
 10. **A second Chrome on a held profile can open a tab in the first and exit.** Reject the live profile lock before launch. Installed Chrome rewrites `/proc/<pid>/cmdline` into one process-title string here; missing NUL-separated arguments must not be treated as pid reuse. A narrow live check verified refusal without changing the first window's endpoint file or page count.
+11. **Native port 0 changes browser-visible behavior.** Earlier native probes verified CDP and engine injection, not `navigator.webdriver`. Native acceptance now requires `False` before injection on a headed fresh-profile page. That value alone is not proof of passing a real site's bot checks.
 
 ## 7. Running it
 
@@ -220,6 +223,8 @@ By hand, from the checkout:
 ```bash
 UC_WINDOWS_FILE=data/windows.json pixi run python -m uc_browser.status_server
 ```
+
+Health scheduling is **off by default**, both in the module entrypoint and `create_app()`. The command above and the unit below do not automatically open health-probe browsers. To opt in explicitly, append `--run-scheduler` (library equivalent: `create_app(run_scheduler=True)`). It may open registered chat sites in headed windows; manual `POST /probe/{name}` and MCP probes remain available without it. `UC_AUTO_BOOTSTRAP=0` and an empty sites file do not remove the built-in registry seeds and are not scheduler controls.
 
 As a Linux user service (example for `smallblackbox`; the checkout path is a proposal; `not implemented`):
 
@@ -256,9 +261,11 @@ Before first start on a host that has run the old arrangement, make sure no brow
 | Unit | cookies: add by list; `from_chrome` without `rookiepy` answers 501; read without `domain` answers 400 | no |
 | Unit | snapshot: the three formats; `mhtml` on a window that is not Chromium or Chrome answers 409 | no |
 | Unit | `UCBrowser` with `service` omitted behaves as before whatever the environment holds; mixed-mode and window-without-service arguments raise `ValueError`; `start` validates `GET /windows` before registering; `ServiceClient` rejects a missing or invalid address (constraint 4) | no |
+| Unit | default app/CLI startup schedules no health probes; explicit opt-in does; manual probing works with scheduling off | no |
 | Live | `scripts/service_probe.py`: rows 1–24 of the Analysis doc against the real service | yes |
 | Live | revocation unwinds `page.wait_for_timeout(600000)` after `DELETE /clients?label=…` | verified: `TargetClosedError` in 0.04 s |
 | Live | no-registration cookie-bearing fetch, retained origin page, incremental UTF-8 stream, HTML/PNG/MHTML snapshots | verified against real Chromium; native first-control injection and second-launch `profile_held` also verified |
+| Live | native service row 20 requires `navigator.webdriver is False` before engine injection; measure the unchanged Playwright Chromium value separately; explicit native port discovery succeeds without `DevToolsActivePort` and a held profile is refused | yes, headed disposable profiles only |
 
 Historical baseline reported by PBX 210-1001: on `main` at `5e3dd0a`, **100 passed, 4 skipped**, run 2026-11-23 on Linux in `event_tool`'s environment **without a built extension bundle**. Three skips were bundle-dependent checks in `test_bench_runner.py`, `test_reverse_loop.py` and `test_vendor_signatures.py`; the fourth was Grok sign-in. The synthetic fixture test did not run in that baseline, so its later failure is not a regression against a passing Linux result.
 

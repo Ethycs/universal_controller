@@ -32,6 +32,11 @@ are printed ``SKIP`` with the reason rather than faked. Rows that mutate
 context-level state of a service window (8, 10, 11, 23) run only with
 ``--destructive``.
 
+Service-mode row 20 also requires ``navigator.webdriver is False`` on the
+native page, before any engine injection. The historical baseline keeps its
+original port-0 launch for comparison and reports the value without imposing
+this new service acceptance requirement.
+
 Every browser and driver process the script starts is tracked and killed at
 exit (also on Ctrl-C and SIGTERM); temporary profiles are removed.
 
@@ -1646,13 +1651,16 @@ def run_native_probe(be, fx: Fixture, window: str, bundle: str, mutate: bool = T
             ctx = br.contexts[0]
             tg = Targets(ctx)
             extra = be.devtools_file(window) if be.devtools_file else "DevToolsActivePort check not available in service mode"
-            row(20, "ok", f"installed Chrome (port 0): window start {fs(start_s)}; attach worked in {fms(t_attach)}; "
-                          f"/json/version={ver.get('Browser') if ver else None}", [extra])
 
             # S1 (supplement): a control on a native page the engine has never seen, through the route
             page0 = ctx.new_page()
             pages.append(page0)
             page0.goto(fx.url("/form"), wait_until="load")
+            webdriver = page0.evaluate("navigator.webdriver")
+            row(20, "ok" if be.mode != "service" or webdriver is False else "FAIL",
+                f"installed Chrome: window start {fs(start_s)}; attach worked in {fms(t_attach)}; "
+                f"/json/version={ver.get('Browser') if ver else None}; navigator.webdriver={webdriver!r}",
+                [extra], data={"webdriver": webdriver})
             tid0 = tg.tid(page0)
             t = now()
             st, obj = http_json("POST", f"{base}/windows/{window}/pages/{tid0}/controls/detect_all",

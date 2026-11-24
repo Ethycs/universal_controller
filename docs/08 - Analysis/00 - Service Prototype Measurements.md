@@ -154,6 +154,23 @@ Runtime: main-derived `9c3d6ab`, Python 3.12.16, Playwright 1.65.2, stealth 2.0.
 
 All isolation/concurrency model assertions passed. Row 11 was stale event enumeration, not page destruction: every owner listing must pump events before taking its page snapshot. Only that probe section was repeated after the correction; the full probe was not rerun.
 
+## 8. Native launch and scheduler acceptance — 2026-11-24
+
+Base: `c211ecd` plus the native-launch/scheduler fixes described here. Linux, Playwright 1.65.2, headed fresh temporary profiles, local HTTP form fixture only. Native used `engine: inject`, default `stealth: false`, and `UC_WINDOW_KEEPASSXC=0`; Chromium used `engine: extension` and its unchanged default stealth setup. These are one-run observations, not a bot-check benchmark.
+
+| Window | Browser version | Debugging port selection | `navigator.webdriver` on a client-created page |
+|---|---|---|---|
+| Native | Chrome 157.0.8103.78 | explicit nonzero loopback port | `False`, before engine injection and through `UCBrowser` attachment |
+| Playwright Chromium | Chromium 159.0.8154.6 | unchanged `--remote-debugging-port=0` | `False` with existing launch flags/context stealth |
+
+The earlier port-0 native runs in §§3 and 7 measured CDP and injection, **not** native `navigator.webdriver`. PBX 210-1001 subsequently measured port 0 → `True`, explicit port → `False` on Chrome 157; that reported failure was the repro and was not rerun here. The retained prototype baseline still reproduces its original port-0 launch. Real-service probe row 20 now requires `False` before native injection.
+
+Native service rows 20–22 and S1 passed: start 0.86 s, attach 34 ms, first remote control 636 ms with an eight-key pattern map, manually injected engine ready in 0.05 s, `detect_all` 29 ms, and `set_text` read back correctly. Row 23 was deliberately skipped (no context-wide script mutation needed). Explicit-port launch produced no `DevToolsActivePort`; a second launch was refused as `profile_held` without changing the running endpoint.
+
+The actual `python -m uc_browser.status_server` entrypoint started with the scheduler off despite built-in registry seeds, `UC_AUTO_BOOTSTRAP=0`, and an empty user sites file. Before the first browser-client registration, neither configured lazy window nor any browser/driver descendant was running. Health and availability endpoints answered; no automatic probe was logged during the run. Both windows remained running with zero clients after release, then graceful service shutdown stopped all owned browser/driver processes. Unit lifespan checks cover explicit scheduler opt-in and manual probes while scheduling is off.
+
+Verification: `pixi run --frozen -e dev pytest -q tests/test_service_windows_core.py tests/test_health.py` → **81 passed**; disposable real CLI/CDP scenario → **passed**, then removed. Windows runtime and real-site bot-check outcomes remain unverified.
+
 ## Verification
 
 Run the retained baseline probe (opens disposable headed windows on the desktop):

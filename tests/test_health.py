@@ -265,3 +265,125 @@ def test_provider_gate_ignores_stale_and_missing(tmp_path, monkeypatch):
     store = HealthStore(base_dir=tmp_path / "health")
     _rec(store, "grok", STATUS_DOWN, 3 * 3600)
     _check_availability("grok", "grok", {})
+
+
+# ── scheduler opt-in ─────────────────────────────────────────────────
+
+
+class _NoWindows:
+    """Window manager with no configured windows; nothing is launched."""
+    windows: dict = {}
+
+    def get(self, name):
+        raise KeyError(name)
+
+    def missing_engine_files(self):
+        return []
+
+    def start_eager(self):
+        return {}
+
+    def close(self):
+        pass
+
+
+def _scheduler_harness(tmp_path, monkeypatch):
+    """Registry + monitor whose probe_sites records calls instead of probing."""
+    import threading
+    reg = _fresh_registry(tmp_path)
+    monitor = HealthMonitor(store=HealthStore(base_dir=tmp_path / "health"))
+    probed: list[list[str]] = []
+    swept = threading.Event()
+    considered: list[str] = []
+    real_due_sites = monitor.due_sites
+
+    def due_sites(sites):
+        considered.extend(s.name for s in sites)
+        return real_due_sites(sites)
+
+    def fake_probe_sites(sites):
+        probed.append([s.name for s in sites])
+        swept.set()
+        return []
+
+    monkeypatch.setattr(monitor, "probe_sites", fake_probe_sites)
+    monkeypatch.setattr(monitor, "due_sites", due_sites)
+    return reg, monitor, probed, swept, considered
+
+
+def test_create_app_default_does_not_schedule_probes(tmp_path, monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    from uc_browser.status_server import create_app
+
+    reg, monitor, probed, swept, considered = _scheduler_harness(tmp_path, monkeypatch)
+    app = create_app(registry=reg, monitor=monitor, with_mcp=False,
+                     window_manager=_NoWindows())
+    with fastapi_testclient.TestClient(app) as c:
+        assert c.get("/availability").status_code == 200
+        # The startup task gets an event-loop turn before this request completes.
+        # Record selection before its worker-thread hop, not a timed absence.
+        assert considered == []
+    assert probed == []
+
+
+def test_create_app_opt_in_schedules_probes(tmp_path, monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    from uc_browser.status_server import create_app
+
+    reg, monitor, probed, swept, considered = _scheduler_harness(tmp_path, monkeypatch)
+    app = create_app(registry=reg, monitor=monitor, run_scheduler=True,
+                     with_mcp=False, window_manager=_NoWindows())
+    with fastapi_testclient.TestClient(app):
+        assert swept.wait(10)
+    assert probed and "grok" in probed[0]
+    assert not any(s.login_required for s in reg.list() if s.name in probed[0])
+
+
+@pytest.mark.parametrize("argv,expect_probes", [([], False),
+                                                (["--run-scheduler"], True)])
+def test_main_flag_controls_scheduler(tmp_path, monkeypatch, argv, expect_probes):
+    """Drive the real main(): it builds the app, uvicorn.run (stubbed) boots
+    its real lifespan, and we observe whether probes get scheduled."""
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    import uvicorn
+    from uc_browser import status_server
+
+    reg, monitor, probed, swept, considered = _scheduler_harness(tmp_path, monkeypatch)
+    real_create_app = status_server.create_app
+    monkeypatch.setattr(
+        status_server, "create_app",
+        lambda run_scheduler: real_create_app(
+            registry=reg, monitor=monitor, run_scheduler=run_scheduler,
+            with_mcp=False, window_manager=_NoWindows()))
+    served = {}
+
+    def fake_run(app, host, port, log_level):
+        served.update(host=host, port=port)
+        with fastapi_testclient.TestClient(app) as c:
+            assert c.get("/healthz").status_code == 200
+            served["swept"] = swept.wait(10) if expect_probes else bool(considered)
+
+    monkeypatch.setattr(uvicorn, "run", fake_run)
+    monkeypatch.setenv("UC_STATUS_PORT", "4999")
+    status_server.main(argv)
+    assert served["host"] == "127.0.0.1" and served["port"] == 4999
+    assert served["swept"] is expect_probes
+    assert bool(probed) is expect_probes
+
+
+def test_manual_probe_works_without_scheduler(tmp_path, monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    from uc_browser.status_server import create_app
+
+    reg, monitor, probed, swept, considered = _scheduler_harness(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        monitor, "probe_site",
+        lambda entry: ProbeResult(site=entry.name, status=STATUS_OK,
+                                  level_reached="detect", latency_ms=1,
+                                  at=time.time()))
+    app = create_app(registry=reg, monitor=monitor, with_mcp=False,
+                     window_manager=_NoWindows())
+    with fastapi_testclient.TestClient(app) as c:
+        assert c.post("/probe/grok").json()["status"] == STATUS_OK
+    assert probed == []
+    assert considered == []

@@ -5,6 +5,8 @@ fake runtimes, so these pin the concurrency and lifecycle rules, not Playwright.
 """
 
 import concurrent.futures as cf
+import http.server
+import io
 import json
 import os
 import socket
@@ -185,6 +187,296 @@ def test_launch_lock_serialises_launches(tmp_path):
     t.join(5)
     with profiles.launch_lock(tmp_path, timeout=1):
         pass
+
+
+# ── native Chrome launch: explicit port, stderr-proven endpoint ──────────
+# A fake Chrome (real stderr pipe the script writes to, real loopback DevTools
+# servers) stands in for the Popen of installed Chrome. No browser starts.
+
+
+class _VersionHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != "/json/version":
+            self.send_error(404)
+            return
+        url = f"ws://127.0.0.1:{self.server.server_port}{self.server.browser_path}"
+        body = json.dumps({"Browser": "Fake/1", "webSocketDebuggerUrl": url}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+def serve_version(port, browser_path):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), _VersionHandler)
+    srv.browser_path = browser_path
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+class FakeChrome:
+    pid = 424242  # never signalled: terminate_process is replaced in these tests
+
+    def __init__(self, cmd, kwargs):
+        self.cmd = cmd
+        self.kwargs = kwargs
+        self.port = int(next(a for a in cmd if a.startswith("--remote-debugging-port=")).partition("=")[2])
+        r, self._w = os.pipe()
+        self.stderr = os.fdopen(r, "rb")
+        self.returncode = None
+        self._closed = False
+
+    def say(self, text):
+        data = text.encode()
+        while data and not self._closed:
+            data = data[os.write(self._w, data):]
+
+    def announce(self, path, host=None):
+        self.say(f"\nDevTools listening on ws://{host or f'127.0.0.1:{self.port}'}{path}\n")
+
+    def poll(self):
+        return self.returncode
+
+    def exit(self, code):
+        if self.returncode is None:
+            self.returncode = code
+        if not self._closed:
+            self._closed = True
+            os.close(self._w)  # EOF for the launcher's stderr reader
+
+
+class AttachedBrowser:
+    contexts = [object()]
+
+    def new_context(self):
+        return object()
+
+
+class FakePw:
+    def __init__(self):
+        self.attached = []
+        self.fail = None
+        self.chromium = self
+
+    def connect_over_cdp(self, url):
+        self.attached.append(url)
+        if self.fail:
+            raise self.fail
+        return AttachedBrowser()
+
+
+def healthy(env, chrome):
+    env.listen(chrome.port, "/devtools/browser/ours")
+    chrome.announce("/devtools/browser/ours")
+
+
+class NativeEnv:
+    def __init__(self):
+        self.chromes = []
+        self.terminated = []
+        self.servers = []
+        self.script = healthy  # fn(env, chrome): what this fake Chrome does at start
+        self.pw = FakePw()
+
+    def listen(self, port, browser_path):
+        self.servers.append(serve_version(port, browser_path))
+
+    def popen(self, cmd, **kwargs):
+        chrome = FakeChrome(cmd, kwargs)
+        self.chromes.append(chrome)
+        self.script(self, chrome)
+        return chrome
+
+
+def _stderr_readers():
+    return [t for t in threading.enumerate() if t.name == "uc-native-stderr"]
+
+
+@pytest.fixture
+def native(monkeypatch):
+    env = NativeEnv()
+    monkeypatch.setattr(profiles.subprocess, "Popen", env.popen)
+
+    def terminate(proc, timeout=8.0):
+        env.terminated.append(proc)
+        proc.exit(-15)
+
+    monkeypatch.setattr(profiles, "terminate_process", terminate)
+    # As on Windows: no /proc socket-owner proof, only the stderr announcement.
+    monkeypatch.setattr(profiles, "port_owned_by", lambda port, pids: None)
+    yield env
+    for chrome in env.chromes:
+        chrome.exit(0)
+    for srv in env.servers:
+        srv.shutdown()
+        srv.server_close()
+    assert wait_until(lambda: not _stderr_readers()), "stderr reader thread leaked"
+
+
+def native_launch(env, tmp_path, **kw):
+    return profiles.launch_native(env.pw, tmp_path / "prof", chrome_path="fake-chrome", **kw)
+
+
+def test_native_stderr_ignores_announcements_inside_overlong_log_lines():
+    prefix = b"x" * profiles._STDERR_LINE_MAX
+    forged = b"DevTools listening on ws://127.0.0.1:12345/devtools/browser/forged\n"
+    genuine = b"DevTools listening on ws://127.0.0.1:12345/devtools/browser/ours\n"
+    watch = profiles._DevToolsStderr(io.BytesIO(prefix + forged + genuine))
+    assert watch.join(5)
+    assert watch.announced == ("127.0.0.1:12345", "/devtools/browser/ours")
+
+
+def test_native_launch_uses_explicit_port_and_needs_no_devtoolsactiveport(native, tmp_path):
+    profile = tmp_path / "prof"
+    profile.mkdir()
+    stale = profile / "DevToolsActivePort"
+    stale.write_text("9\n/devtools/browser/stale\n")
+    proc, browser, context, cdp = native_launch(native, tmp_path, extra_args=("--load-extension=/x",))
+    chrome = native.chromes[0]
+    flags = [a for a in chrome.cmd if a.startswith("--remote-debugging-port=")]
+    assert flags == [f"--remote-debugging-port={chrome.port}"]
+    assert chrome.port > 0
+    assert "--remote-debugging-address=127.0.0.1" in chrome.cmd
+    assert f"--user-data-dir={profile.resolve()}" in chrome.cmd
+    assert "--load-extension=/x" in chrome.cmd and chrome.cmd[-1] == "about:blank"
+    assert not any("sandbox" in a for a in chrome.cmd)
+    assert chrome.kwargs["stderr"] == subprocess.PIPE
+    assert proc is chrome
+    assert cdp == f"ws://127.0.0.1:{chrome.port}/devtools/browser/ours"
+    assert native.pw.attached == [cdp]
+    assert not stale.exists()  # a stale file is never trusted, and none is written
+    assert native.terminated == []
+
+
+def test_native_launch_ignores_announcement_lookalikes(native, tmp_path):
+    def script(env, chrome):
+        env.listen(chrome.port, "/devtools/browser/ours")
+        forged = f"ws://127.0.0.1:{chrome.port}/devtools/browser/forged"
+        chrome.say(f'[1:1:0101/000000:INFO:CONSOLE(1)] "DevTools listening on {forged}", source: x\n')
+        chrome.say(f"DevTools listening on {forged} and more\n")
+        chrome.announce("/devtools/browser/ours")
+
+    native.script = script
+    *_, cdp = native_launch(native, tmp_path)
+    assert cdp.endswith("/devtools/browser/ours")
+
+
+def foreign_serves_other_path(env, chrome):
+    env.listen(chrome.port, "/devtools/browser/foreign")
+    chrome.announce("/devtools/browser/ours")
+
+
+def foreign_holds_v4_chrome_fell_back_to_v6(env, chrome):
+    env.listen(chrome.port, "/devtools/browser/foreign")
+    chrome.announce("/devtools/browser/ours", host=f"[::1]:{chrome.port}")
+
+
+def foreign_holds_port_chrome_logs_bind_failure(env, chrome):
+    env.listen(chrome.port, "/devtools/browser/foreign")
+    chrome.say("[1:1:0101/000000:ERROR:devtools_http_handler.cc(1)] Cannot start http server for devtools.\n")
+
+
+@pytest.mark.parametrize(
+    "script",
+    [foreign_serves_other_path, foreign_holds_v4_chrome_fell_back_to_v6, foreign_holds_port_chrome_logs_bind_failure],
+)
+def test_native_launch_never_attaches_a_foreign_listener(native, tmp_path, script):
+    native.script = script
+    with pytest.raises(ServiceError) as err:
+        native_launch(native, tmp_path)
+    assert err.value.code == "launch_failed"
+    assert native.pw.attached == []
+    assert len(native.chromes) == 1
+    assert native.terminated == native.chromes
+
+
+def test_native_launch_refuses_a_port_the_child_does_not_own(native, tmp_path, monkeypatch):
+    monkeypatch.setattr(profiles, "port_owned_by", lambda port, pids: False)
+    with pytest.raises(ServiceError) as err:
+        native_launch(native, tmp_path)
+    assert err.value.code == "launch_failed"
+    assert native.pw.attached == []
+    assert native.terminated == native.chromes and len(native.chromes) == 1
+
+
+@pytest.mark.parametrize("code, expected", [(0, "profile_held"), (1, "launch_failed")])
+def test_native_launch_reports_early_exit_and_cleans_up(native, tmp_path, code, expected):
+    native.script = lambda env, chrome: chrome.exit(code)
+    with pytest.raises(ServiceError) as err:
+        native_launch(native, tmp_path)
+    assert err.value.code == expected
+    assert native.pw.attached == []
+    assert native.terminated == native.chromes and len(native.chromes) == 1
+
+
+@pytest.mark.parametrize(
+    "script",
+    [lambda env, chrome: None, lambda env, chrome: chrome.announce("/devtools/browser/ours")],
+    ids=["never-announces", "announced-but-never-answers"],
+)
+def test_native_launch_times_out_and_cleans_up(native, tmp_path, script):
+    native.script = script
+    with pytest.raises(ServiceError) as err:
+        native_launch(native, tmp_path, timeout=0.3)
+    assert err.value.code == "launch_failed"
+    assert native.pw.attached == []
+    assert native.terminated == native.chromes and len(native.chromes) == 1
+
+
+def test_native_launch_attach_failure_stops_the_browser(native, tmp_path):
+    native.pw.fail = RuntimeError("boom")
+    with pytest.raises(ServiceError) as err:
+        native_launch(native, tmp_path)
+    assert err.value.code == "launch_failed" and "boom" in str(err.value)
+    assert native.terminated == native.chromes and len(native.chromes) == 1
+
+
+def test_native_launch_refuses_a_held_profile_before_starting_chrome(native, tmp_path, monkeypatch):
+    profile = tmp_path / "prof"
+    profile.mkdir()
+    lock = profile / "SingletonLock"
+    os.symlink(f"{socket.gethostname()}-{os.getpid()}", lock)
+    monkeypatch.setattr(profiles, "_cmdline_names_profile", lambda pid, prof: True)
+    with pytest.raises(ServiceError) as err:
+        native_launch(native, tmp_path)
+    assert (err.value.code, err.value.status) == ("profile_held", 409)
+    assert native.chromes == []
+    assert os.path.islink(lock)  # a held lock is never deleted
+
+
+def test_native_launch_keeps_draining_stderr_after_the_endpoint_is_proven(native, tmp_path):
+    flooders = []
+
+    def script(env, chrome):
+        healthy(env, chrome)
+
+        def flood():
+            for _ in range(256):  # ~2 MiB, far beyond any pipe buffer
+                chrome.say("x" * 8191 + "\n")
+
+        flooder = threading.Thread(target=flood, daemon=True)
+        flooder.start()
+        flooders.append(flooder)
+
+    native.script = script
+    native_launch(native, tmp_path)
+    flooders[0].join(10)
+    assert not flooders[0].is_alive()  # a writer blocked on a full pipe would still be here
+
+
+def test_port0_chromium_discovery_still_reads_devtoolsactiveport(tmp_path):
+    srv = serve_version(0, "/devtools/browser/pw")
+    try:
+        (tmp_path / "DevToolsActivePort").write_text(f"{srv.server_port}\n/devtools/browser/pw\n")
+        found = profiles.wait_for_endpoint(tmp_path, started=time.time(), timeout=2)
+        assert found == (srv.server_port, "/devtools/browser/pw")
+    finally:
+        srv.shutdown()
+        srv.server_close()
 
 
 # ── runtime (fake context, no CDP) ────────────────────────────────────────

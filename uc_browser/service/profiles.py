@@ -14,10 +14,27 @@ Rules enforced here:
   launch). Held-browser lock files are never deleted.
 * Concurrent launches on one profile are serialised by an OS file lock
   (``launch_lock``) held only for the launch.
-* The debugging port is always ``0`` on loopback. ``DevToolsActivePort`` is
-  deleted before our own launch (the profile is known to be free and the lock
-  is held) and accepted only if it is fresh, answers ``/json/version`` with the
-  recorded browser path, and belongs to the process that holds the profile.
+* Two kinds of browser find their debugging endpoint in two different ways:
+
+  - **Playwright Chromium** (``windows._launch_chromium``) runs with debugging
+    port ``0`` on loopback. ``DevToolsActivePort`` is deleted before our own
+    launch (the profile is known to be free and the lock is held) and accepted
+    only if it is fresh, answers ``/json/version`` with the recorded browser
+    path, and belongs to the process that holds the profile
+    (``wait_for_endpoint`` + ``verify_endpoint_owner``).
+  - **Installed native Chrome** (``launch_native``; native windows and
+    in-process ``UCBrowser``) runs with an explicit nonzero loopback port that
+    this module picks just before the launch: port ``0`` makes native Chrome
+    report ``navigator.webdriver=true``, an explicit port does not. An
+    explicit port writes no ``DevToolsActivePort``, so this path never reads
+    that file. Because the port is picked before Chrome binds it, another
+    process can take it in between; so the endpoint is trusted only when the
+    launched Chrome itself announced it on its own stderr
+    (``DevTools listening on ws://127.0.0.1:<port>/devtools/browser/<id>``,
+    ``<id>`` random), the launched process is alive, and ``/json/version`` on
+    that port serves exactly that browser path. That proof needs no
+    ``/proc``, so it holds on Windows too; on Linux ``verify_endpoint_owner``
+    adds the socket-owner check.
 * Every launch failure terminates the processes this launch started.
 * The installed Chrome sandbox is preserved: no ``--no-sandbox`` here.
 """
@@ -36,6 +53,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -53,6 +71,12 @@ log = logging.getLogger("uc_browser.service.profiles")
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 _ENDPOINT_FILE = "DevToolsActivePort"
 _LOCK_WAIT_S = 60.0
+# Native Chrome prints this whole line on stderr once its debugging server is
+# bound; the browser id in it is random per process.
+_ANNOUNCE_RE = re.compile(r"DevTools listening on ws://([^/\s]+)(/devtools/browser/[^/\s]+)")
+_BIND_FAILED = "Cannot start http server for devtools"  # Chrome's log line when the port is taken
+_STDERR_LINE_MAX = 16 * 1024  # longest stderr chunk the reader holds in memory
+_STDERR_JOIN_S = 2.0
 
 
 # ── /proc helpers (Linux). Every helper answers None when it cannot tell ──
@@ -345,6 +369,9 @@ def wait_for_endpoint(
 ) -> tuple[int, str]:
     """(port, browser_path) once a *fresh* ``DevToolsActivePort`` is served.
 
+    For Playwright Chromium started with debugging port ``0`` only; native
+    Chrome (``launch_native``) uses an explicit port and writes no such file.
+
     ``started`` is ``time.time()`` taken before the launch; older files are
     ignored. The file is trusted only if the port answers ``/json/version``
     with the recorded browser path. With ``proc``, an early exit is reported
@@ -476,6 +503,133 @@ def kill_profile_browser(pid: int, profile: Path, timeout: float = 8.0) -> None:
             time.sleep(0.1)
 
 
+def _free_loopback_port() -> int:
+    """A nonzero port nothing listens on at this moment (127.0.0.1).
+
+    The probe socket is closed before Chrome binds the port, so another
+    process can take it in between; ``launch_native`` never trusts the port
+    alone.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+class _DevToolsStderr:
+    """Reads a launched browser's stderr on a daemon thread until EOF.
+
+    Chrome announces its debugging endpoint on stderr as
+    ``DevTools listening on ws://<host:port>/devtools/browser/<id>`` once the
+    server is bound; ``<id>`` is random, so the line proves which browser owns
+    the endpoint. Only whole announcement lines count (a log-prefixed or
+    page-supplied line never matches). Memory stays bounded (chunks are cut
+    at ``_STDERR_LINE_MAX``; only the first announcement is kept) and the
+    pipe is drained until the browser and every child sharing it are gone,
+    so a chatty browser never blocks on a full pipe. The thread closes the
+    stream at EOF.
+    """
+
+    def __init__(self, stream) -> None:
+        self._stream = stream
+        self._changed = threading.Event()
+        self.announced: tuple[str, str] | None = None  # ("host:port", "/devtools/browser/<id>")
+        self.bind_failed = False
+        self._thread = threading.Thread(target=self._run, name="uc-native-stderr", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            at_line_start = True
+            while True:
+                chunk = self._stream.readline(_STDERR_LINE_MAX)
+                if not chunk:
+                    return
+                whole_line = at_line_start and chunk.endswith(b"\n")
+                at_line_start = chunk.endswith(b"\n")
+                if whole_line and self.announced is None and not self.bind_failed:
+                    self._inspect(chunk)
+        except (OSError, ValueError):  # the pipe broke or was closed under us
+            return
+        finally:
+            with contextlib.suppress(OSError):
+                self._stream.close()
+            self._changed.set()
+
+    def _inspect(self, raw: bytes) -> None:
+        text = raw.decode("utf-8", "replace").strip()
+        if _BIND_FAILED in text:
+            self.bind_failed = True
+        else:
+            m = _ANNOUNCE_RE.fullmatch(text)
+            if m is None:
+                return
+            self.announced = (m.group(1), m.group(2))
+        self._changed.set()
+
+    def wait(self, timeout: float) -> None:
+        """Sleep until the reader saw something decisive or hit EOF, at most ``timeout``."""
+        if self._changed.wait(timeout):
+            self._changed.clear()
+
+    def join(self, timeout: float) -> bool:
+        """True once the reader thread has ended."""
+        self._thread.join(timeout)
+        return not self._thread.is_alive()
+
+
+def _stop_native(proc: subprocess.Popen, watch: _DevToolsStderr | None) -> None:
+    """Stop a native Chrome this launch started and release its stderr reader."""
+    terminate_process(proc)
+    if watch is None:
+        if proc.stderr is not None:
+            with contextlib.suppress(OSError):
+                proc.stderr.close()
+    elif not watch.join(_STDERR_JOIN_S):
+        log.warning("native Chrome stderr is still open after it was stopped; its reader ends with the last holder")
+
+
+def _await_native_endpoint(
+    profile: Path,
+    proc: subprocess.Popen,
+    watch: _DevToolsStderr,
+    port: int,
+    deadline: float,
+) -> str:
+    """Browser path of the endpoint ``proc`` itself announced on ``port``.
+
+    Returns only when the live ``proc`` announced exactly
+    ``127.0.0.1:<port>`` on its stderr and ``/json/version`` on that port
+    serves the same browser path. A listener that took the port first,
+    a different announced address, or expiry raises ``launch_failed``.
+    An early process exit is ``profile_held`` / ``launch_failed``.
+    """
+    last: object = "the browser has not announced a DevTools endpoint"
+    while True:
+        if proc.poll() is not None:
+            raise _exited(profile, proc)
+        if watch.bind_failed:
+            raise ServiceError("launch_failed", f"the browser could not listen on port {port}")
+        announced = watch.announced
+        if announced is not None:
+            host, bpath = announced
+            if host != f"127.0.0.1:{port}":
+                raise ServiceError("launch_failed", f"the browser announced {host}, not 127.0.0.1:{port}")
+            try:
+                version = devtools_http(port, "/json/version")
+            except Exception as exc:  # noqa: BLE001 - urllib/json errors: keep waiting
+                last = exc
+            else:
+                served = version.get("webSocketDebuggerUrl", "") if isinstance(version, dict) else ""
+                if not isinstance(served, str) or urlsplit(served).path != bpath:
+                    raise ServiceError("launch_failed", f"port {port} is answered by a different browser than the one launched")
+                if proc.poll() is not None:
+                    raise _exited(profile, proc)
+                return bpath
+        if time.monotonic() >= deadline:
+            raise ServiceError("launch_failed", f"browser did not serve CDP before the launch timeout: {last}")
+        watch.wait(0.05)
+
+
 def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None = None, timeout: float = 30.0):
     """Launch installed Chrome on ``profile`` and attach ``pw`` to it.
 
@@ -483,6 +637,12 @@ def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None =
     ``ws://127.0.0.1:<port>/devtools/browser/<id>``. ``pw`` is the caller's
     sync Playwright and is used on the calling thread only. The caller owns
     teardown (``terminate_process(proc)`` once it is done with the browser).
+
+    Uses an explicitly selected loopback port, not port 0. The live child's
+    stderr announcement and /json/version must agree before attachment;
+    where available, /proc additionally verifies socket ownership. A bind
+    race fails closed without retrying or attaching to the foreign browser.
+    stderr is drained for the browser's lifetime. No --no-sandbox is added.
 
     Raises ``ServiceError``: ``profile_held`` (409) if a browser holds the
     profile or exits at once because one does; ``launch_failed`` otherwise.
@@ -499,10 +659,12 @@ def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None =
 
     with launch_lock(profile):
         assert_profile_available(profile)
+        # Explicit-port Chrome writes no endpoint file; remove stale discovery.
         remove_stale_endpoint(profile)
+        port = _free_loopback_port()
         cmd = [
             chrome,
-            "--remote-debugging-port=0",
+            f"--remote-debugging-port={port}",
             "--remote-debugging-address=127.0.0.1",
             f"--user-data-dir={profile}",
             "--no-first-run",
@@ -510,19 +672,21 @@ def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None =
             *extra_args,
             "about:blank",
         ]
-        started = time.time()
-        log.info("launching native Chrome on %s", profile)
+        deadline = time.monotonic() + timeout
+        log.info("launching native Chrome on %s (debugging port %d)", profile, port)
         try:
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 start_new_session=(os.name == "posix"),
             )
         except OSError as exc:
             raise ServiceError("launch_failed", f"cannot start {chrome}: {exc}") from exc
+        watch: _DevToolsStderr | None = None
         try:
-            port, bpath = wait_for_endpoint(profile, proc, started=started, timeout=timeout)
+            watch = _DevToolsStderr(proc.stderr)
+            bpath = _await_native_endpoint(profile, proc, watch, port, deadline)
             verify_endpoint_owner(profile, port, launched=_descendants(proc.pid))
             cdp = f"ws://127.0.0.1:{port}{bpath}"
             browser = pw.chromium.connect_over_cdp(cdp)
@@ -530,7 +694,7 @@ def launch_native(pw, profile: Path, *, extra_args=(), chrome_path: str | None =
             context = contexts[0] if contexts else browser.new_context()
             return proc, browser, context, cdp
         except BaseException as exc:
-            terminate_process(proc)
+            _stop_native(proc, watch)
             if isinstance(exc, (ServiceError, KeyboardInterrupt, SystemExit)):
                 raise
             raise ServiceError("launch_failed", f"native Chrome attach failed: {exc}") from exc

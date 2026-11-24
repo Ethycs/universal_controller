@@ -58,7 +58,7 @@ DISPLAY=:0 XAUTHORITY=/home/rabbit/.Xauthority pixi run service  # http://127.0.
 | `/windows`, `/clients`, `/windows/{name}/pages` | Window/CDP discovery, pid-bound clients and leased pages |
 | `/windows/{name}/controls/{control}`, `/fetch`, `/cookies`, `/snapshot` | Controls and HTTP-only operations; the last three also sit under `/windows/{name}` |
 
-A background scheduler probes each registered site on its interval (default 15 min); probes are serialized on one worker thread.
+Background health probes are **off by default**. Opt in with `pixi run python -m uc_browser.status_server --run-scheduler` (or `create_app(run_scheduler=True)`). Opt-in probes each registered non-login-required site on its interval (default 15 min), serialized on one worker thread, and may open headed chat-site windows. `POST /probe/{name}` and MCP manual probes still work without the scheduler. Neither `UC_AUTO_BOOTSTRAP=0` nor an empty sites file disables the registry's built-in seeds; use the scheduler switch, not those settings, to control automatic probing.
 
 `UC_WINDOWS_FILE` selects a windows config; with no file, the service defines one lazy local Chromium/extension window. Build `extension/dist/uc-extension.js` before starting even lazy extension/inject windows: startup refuses a missing bundle. No live profile or service unit is installed by these commands.
 

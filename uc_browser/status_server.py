@@ -10,12 +10,16 @@ One uvicorn process serving:
                       registry tools: uc_site_add / uc_site_search /
                       uc_site_list / uc_site_probe / uc_availability
 
-A background scheduler probes each registry site on its own interval
-(default 15 min). Probes are serialized and run in a worker thread — the
-browser is single-writer, same rule as the litellm proxy.
+The background health scheduler is OFF by default (it opens browser windows
+to probe sites). Pass --run-scheduler to probe each registry site on its own
+interval (default 15 min); `create_app(run_scheduler=True)` is the library
+equivalent. Probes are serialized and run in a worker thread — the browser is
+single-writer, same rule as the litellm proxy. POST /probe/{name} works with
+or without the scheduler.
 
 Run:
   pixi run -e dev python -m uc_browser.status_server          # port 4010
+  pixi run -e dev python -m uc_browser.status_server --run-scheduler
   UC_STATUS_PORT=4011 pixi run -e dev python -m uc_browser.status_server
 
 The litellm proxy forwards /uc/availability to this server (see
@@ -28,6 +32,7 @@ does for the Grok tools.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import html
 import logging
@@ -160,7 +165,7 @@ def _build_mcp(monitor: HealthMonitor):
 
 def create_app(registry: Optional[SiteRegistry] = None,
                monitor: Optional[HealthMonitor] = None,
-               run_scheduler: bool = True,
+               run_scheduler: bool = False,
                with_mcp: bool = True,
                window_manager=None):
     from fastapi import FastAPI, HTTPException
@@ -275,12 +280,27 @@ def create_app(registry: Optional[SiteRegistry] = None,
     return app
 
 
-def main() -> None:
+def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="python -m uc_browser.status_server",
+        description="UC local service: status page, availability API, "
+                    "window/control plane and MCP endpoint.")
+    parser.add_argument(
+        "--run-scheduler", action="store_true", default=False,
+        help="run the background health scheduler, which opens browser "
+             "windows to probe sites every interval. Off by default; "
+             "POST /probe/{name} works either way.")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    args = _parse_args(argv)
     import uvicorn
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s %(name)s %(message)s")
     port = int(os.environ.get("UC_STATUS_PORT", "4010"))
-    uvicorn.run(create_app(), host="127.0.0.1", port=port, log_level="info")
+    uvicorn.run(create_app(run_scheduler=args.run_scheduler),
+                host="127.0.0.1", port=port, log_level="info")
 
 
 if __name__ == "__main__":

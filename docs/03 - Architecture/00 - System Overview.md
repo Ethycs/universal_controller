@@ -60,7 +60,7 @@ UC turns any web chat UI into a callable API: a site-agnostic JS engine detects 
 - **Outputs**: `UCBrowser` (launch modes `CHROME` / `CHROMIUM_EXT` / `NATIVE_CDP` / `HEADLESS`; `chat()` is the full generic round-trip: scored input discovery → ML fallback → framework-aware setText → proximity send-button → trigram-diff response extraction); `sites/grok*.py` (the hand-tuned grok adapter: fast path + conversation CRUD); `sites/generic.py` `GenericClient` (any registry site via `UCBrowser.chat()`, one tab per (site, session) pair for conversation continuity).
 - **Constraints**: sync Playwright is thread-affine — one instance per thread, ever; the Chrome profile is single-writer; one send at a time (locks serialize).
 
-With `UCBrowser(service=url, window=name)` (caller names both; no environment fallback), `start()` validates the window via `GET /windows`, then registers a pid-bound client, attaches over CDP, creates leased pages through HTTP, and sends page controls to the service. `new_page()` is public in both modes; raw page scripting and interception remain local. Without `service`, existing in-process use remains available; native launch now uses port 0 and held-profile guards.
+With `UCBrowser(service=url, window=name)` (caller names both; no environment fallback), `start()` validates the window via `GET /windows`, then registers a pid-bound client, attaches over CDP, creates leased pages through HTTP, and sends page controls to the service. `new_page()` is public in both modes; raw page scripting and interception remain local. Without `service`, existing in-process use remains available; native launch uses a dynamically selected explicit loopback port and held-profile guards.
 
 ## 5. Registry (`uc_browser/registry.py`)
 
@@ -80,9 +80,9 @@ With `UCBrowser(service=url, window=name)` (caller names both; no environment fa
 ## 7. Status server (`uc_browser/status_server.py`)
 
 - **Domain**: one loopback uvicorn process presenting registry × health and owning configured browser windows.
-- **Inputs**: registry/health store, unchanged optional probe scheduler, `UC_WINDOWS_FILE` (default `data/windows.json`).
+- **Inputs**: registry/health store, opt-in `--run-scheduler` (or `create_app(run_scheduler=True)`), `UC_WINDOWS_FILE` (default `data/windows.json`). Both service entrypoints default to no automatic probes; manual probe routes remain available.
 - **Outputs**: existing status/availability/probe/MCP routes plus `/windows`, `/clients`, pages, controls, cookies, fetch and snapshots. Site-session routes are not implemented.
-- **Constraints**: `127.0.0.1:4010` (`UC_STATUS_PORT` overrides); the litellm proxy pass-through depends on it. Native Chrome and Chromium each use their own profile and browser-selected loopback CDP port.
+- **Constraints**: `127.0.0.1:4010` (`UC_STATUS_PORT` overrides); the litellm proxy pass-through depends on it. Native Chrome and Chromium each use their own profile and loopback CDP port. Native uses an explicitly selected port with launched-process endpoint proof; Playwright Chromium keeps browser-selected port 0 and its existing stealth setup.
 
 ### Service substrate (`uc_browser/service/`)
 
