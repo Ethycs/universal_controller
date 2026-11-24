@@ -206,14 +206,15 @@ Reasons the service creates the page rather than the client:
 
 The client still navigates, so observers that hook the page (E5) attach before the first request, as now. A client must wait for the new target to appear on its own connection (row 6: 0.16–0.17 s); the client library hides this.
 
-**Leases.** Every page has a holder: a registered client, or an in-service session (§7).
+**Leases.** Service-created pages belong to a registered client, an in-service operation/session, or explicitly to the current window.
 
 - A client registers once per `UCBrowser` with its process id and a label, and gets a client id. A long-lived process holds many clients over time (E1).
 - `close()` releases the client; the service closes its pages (E9).
 - **Death:** a reaper closes the pages of any client whose process has exited (E12, E14). No heartbeat: the service is local, so process liveness is exact.
-- **Revocation:** anyone may release a client by label. This is the pathway for a holder that is alive but stuck (E10): the job runner labels its clients with the job id and revokes that label at the timeout. The service closes the pages through its own attachment, which a stuck holder cannot prevent (Theory §2, consequence 4).
+- **Revocation:** release by label closes the client's leased pages. Native cleanup uses HTTP; ordinary owners use their browser connection. Explicitly window-owned tabs survive and cannot be used as an interruptible work page. A still-connected client continues to block quiet preparation even after revocation.
 - **Sweep:** a page with no holder — made by a raw client over CDP — is left alone while any client is registered on its window, and closed once none is.
 - **Quiet loading:** a native preparer registers `unattached: true` only when there are no other clients, service workers or existing endpoint connections. Metadata alone does not determine page readiness; the consumer does. Ordinary cleanup disconnects before releasing registration. Raw clients bypassing registration and connecting after a reservation remain outside this coordination guarantee.
+- **Optional window lifetime:** the default remains client ownership. A caller may create or promote a tab to `window`; it survives release, process death and sweep, but ends on explicit close or window/browser termination. No stored URL or restart restoration. It adds no client or connection. Any actual Playwright attachment still reaches every page, including retained tabs.
 
 *Rejected: idle timeouts on client pages.* A harvest worker can hold a page for many minutes making only transport calls, which the service does not see. Sessions are different: the service runs every operation on them and knows exactly when they are idle (§7).
 

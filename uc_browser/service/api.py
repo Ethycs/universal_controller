@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
@@ -28,6 +28,12 @@ class PageBody(Body):
     client_id: str
     url: str | None = None
     wait_ms: int = Field(default=0, ge=0)
+    lifetime: Literal["client", "window"] = "client"
+
+
+class PageLifetimeBody(Body):
+    client_id: str
+    lifetime: Literal["client", "window"]
 
 
 class ControlBody(Body):
@@ -93,14 +99,16 @@ def create_router(manager, leases, operations) -> APIRouter:
 
     @router.post("/windows/{name}/pages")
     async def new_page(name: str, body: PageBody):
+        # Default lifetime keeps the original create_page call shape.
+        lifetime = {} if body.lifetime == "client" else {"lifetime": body.lifetime}
         if await asyncio.to_thread(leases.is_unattached_client, name, body.client_id):
             # A quiet client's page is made over DevTools HTTP: no worker
             # attaches, so there is nothing to navigate or wait on.
             if body.wait_ms:
                 raise ServiceError("wait_unsupported", "wait_ms is not supported for an unattached client", 400)
-            target = await asyncio.to_thread(leases.create_page, name, body.client_id, url=body.url)
+            target = await asyncio.to_thread(leases.create_page, name, body.client_id, url=body.url, **lifetime)
             return {"target_id": target}
-        target = await asyncio.to_thread(leases.create_page, name, body.client_id)
+        target = await asyncio.to_thread(leases.create_page, name, body.client_id, **lifetime)
         if body.url is not None:
             try:
                 await asyncio.to_thread(operations.navigate, name, target, body.url, body.wait_ms)
@@ -112,6 +120,10 @@ def create_router(manager, leases, operations) -> APIRouter:
                         raise
                 raise
         return {"target_id": target}
+
+    @router.put("/windows/{name}/pages/{target}/lifetime")
+    async def set_page_lifetime(name: str, target: str, body: PageLifetimeBody):
+        return await asyncio.to_thread(leases.set_page_lifetime, name, target, body.client_id, body.lifetime)
 
     @router.get("/windows/{name}/pages/{target}")
     async def page_info(name: str, target: str):

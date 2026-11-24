@@ -180,3 +180,17 @@ The first ra-sf run timed out at 1200 s with the window later found iconified. R
 Final UC-side check: native running, zero clients, one blank page, zero established debugging-port connections; old unit inactive and disabled. Grok proxy remains a separate HTTP endpoint, not dependent on Grok MCP tools.
 
 Migration is complete. Optional tab/window persistence was subsequently authorized as separate follow-on work; the current reaper still closes unheld pages and no persistence behavior is claimed here.
+
+## 13. 2026-11-24 optional window-lifetime tabs
+
+The owner authorized persistence as an option and explicitly selected **until the browser/window ends**, not URL storage or restart restoration. Default cleanup remains unchanged; no automatic focus/mapping was authorized.
+
+Implemented optional lifetime at page creation, explicit promotion/reassignment, discovery as `holder: "window"`, and service-mode `UCBrowser.new_page(lifetime="window")`. Retention uses the existing service-owned inventory. Other clients' and internal service pages cannot be taken; invalid requests and missing targets fail. Explicit close, failed navigation/resolution and browser-generation changes still clean up retained pages.
+
+Verification: **193 passed in 61.29 s**:
+```bash
+pixi run --frozen -e dev pytest -q tests/test_service_page_lifetime.py tests/test_service_native_migration.py tests/test_service_unattached_api.py tests/test_service_api.py tests/test_service_client.py tests/test_service_targets.py tests/test_service_sessions.py tests/test_cdp_attachment.py
+```
+Disposable real Chrome covered release/revoke/process-death survival, subsequent quiet admission with zero sockets, explicit closure, reassignment to client cleanup, ownership refusal, invalid requests, navigation/resolution failures, and no restoration after browser termination/relaunch. No live profile was used in these checks.
+
+Deployment and optional consumer activation are pending. Retained tabs are still attached whenever any Playwright client/worker is connected to that window; retention alone does not attach.

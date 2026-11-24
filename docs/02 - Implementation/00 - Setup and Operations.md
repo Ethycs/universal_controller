@@ -93,6 +93,12 @@ Production requires the desktop's `DISPLAY`/`XAUTHORITY`. Screen blanking was co
 
 **Verification:** `pixi run --frozen -e dev pytest -q tests/test_service_unattached_owner.py tests/test_service_unattached_api.py tests/test_service_native_migration.py`. The real-browser case uses a disposable headless profile and loopback page; it does not prove real-site clearance. Record deployed source states and counts separately from this test result.
 
+### 5.3 Optional retained tabs
+
+Default tabs end with their client. For a service-owned window, request `new_page(..., lifetime="window")` through `ServiceClient` or `UCBrowser`, or promote a tab after checking it with `ServiceClient.set_page_lifetime(window, target_id, client_id, "window")`. Release the client normally but do not explicitly close the retained tab. Discovery shows `holder: "window"`; `close_page` still closes it. Assign lifetime `"client"` to return it to a registered client's cleanup.
+
+This lasts only until explicit close or the current browser/window ends: no configuration entry, saved URL or reopening after restart. The caller owns duplicate replacement. Retained native tabs do not block quiet preparation, but a Playwright connection attaches to them while it exists. Keep source work on separate client-owned tabs so revocation can still interrupt it.
+
 ## 6. Grok proxy and service deployment
 
 `systemd/uc-service.service` and `systemd/uc-grok-proxy.service` are Linux user-unit templates for an independent checkout at `~/universal_controller`. The service alone owns the signed-in browser; the Grok-only proxy uses `grok-proxy.config.yaml`, exposing the existing `uc-grok` and `grok-browser` model names on loopback port 4000.

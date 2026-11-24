@@ -287,7 +287,11 @@ class ServiceClient:
         client_id: Optional[str] = None,
         url: Optional[str] = None,
         wait_ms: Optional[int] = None,
+        *,
+        lifetime: str = "client",
     ) -> str:
+        """``lifetime="window"`` makes the page outlive this client; it ends
+        on close_page or when the window does."""
         body: dict = {}
         if client_id is not None:
             body["client_id"] = client_id
@@ -295,7 +299,18 @@ class ServiceClient:
             body["url"] = url
         if wait_ms is not None:
             body["wait_ms"] = wait_ms
+        if lifetime != "client":
+            body["lifetime"] = lifetime
         return self.request("POST", _path("windows", window, "pages"), body)["target_id"]
+
+    def set_page_lifetime(self, window: str, target_id: str, client_id: str, lifetime: str) -> dict:
+        """Promote (``"window"``) or demote (``"client"``) a page's lifetime.
+        Returns ``{target_id, lifetime, holder}``."""
+        return self.request(
+            "PUT",
+            _path("windows", window, "pages", target_id, "lifetime"),
+            {"client_id": client_id, "lifetime": lifetime},
+        )
 
     def page_info(self, window: str, target_id: str) -> dict:
         """``{target_id, url, title, age_s}`` for one page, read from DevTools

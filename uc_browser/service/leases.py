@@ -41,8 +41,8 @@ class LeaseStore:
         self.interval = interval
         self.clients: dict[str, Client] = {}
         self.leases: dict[tuple[str, str], str] = {}
-        # Pages owned by the service, not by a registered process: fetch pages
-        # (holder None) and site sessions (holder "session:<site>/<id>").
+        # Service-owned pages: fetch (None), site sessions ("session:<site>/<id>"),
+        # and explicitly retained pages ("window", until close or generation end).
         self.internal: dict[tuple[str, str], str | None] = {}
         self.generations: dict[str, int] = {}
         self.lock = threading.RLock()
@@ -121,8 +121,10 @@ class LeaseStore:
             lambda rt: rt.target_id(rt.context.new_page()), launch=launch,
         ).result()
 
-    def create_page(self, name: str, client_id: str, url: str | None = None) -> str:
+    def create_page(self, name: str, client_id: str, url: str | None = None, *, lifetime: str = "client") -> str:
         window = self.manager.get(name)
+        if lifetime not in ("client", "window"):
+            raise ServiceError("bad_arguments", "lifetime must be client or window", 400)
         # Keep creation and lease assignment atomic against release/revocation.
         with self.lock:
             client = self._client(client_id, name)
@@ -131,8 +133,39 @@ class LeaseStore:
             window.start()
             self._generation(window)
             target = self._new_target(window, url)
-            self.leases[name, target] = client_id
+            if lifetime == "window":
+                self.internal[name, target] = "window"
+            else:
+                self.leases[name, target] = client_id
             return target
+
+    def set_page_lifetime(self, name: str, target: str, client_id: str, lifetime: str) -> dict:
+        """Transfer an owned page between a client and its current window."""
+        if lifetime not in ("client", "window"):
+            raise ServiceError("bad_arguments", "lifetime must be client or window", 400)
+        window = self.manager.get(name)
+        key = (name, target)
+        with self.lock:
+            self._client(client_id, name)
+            self._generation(window)
+            if not window.running:
+                raise ServiceError("no_such_target", "window is not running", 404)
+            pages = window.owner(lambda rt: rt.pages_info(), launch=False).result()
+            if not any(page["target_id"] == target for page in pages):
+                self.leases.pop(key, None)
+                self.internal.pop(key, None)
+                raise ServiceError("no_such_target", "no such page", 404)
+            if self.leases.get(key) != client_id and self.internal.get(key) != "window":
+                raise ServiceError("page_not_owned", "page belongs to another client or service operation", 409)
+            if lifetime == "window":
+                self.leases.pop(key, None)
+                self.internal[key] = "window"
+                holder = "window"
+            else:
+                self.internal.pop(key, None)
+                self.leases[key] = client_id
+                holder = client_id
+            return {"target_id": target, "lifetime": lifetime, "holder": holder}
 
     def internal_page(self, name: str, holder: str | None = None) -> str:
         """A service-owned page, kept by the zero-client sweep. ``holder``

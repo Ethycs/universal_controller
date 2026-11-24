@@ -888,7 +888,7 @@ class UCBrowser:
 
     # ── Page management ─────────────────────────────────────────────────
 
-    def new_page(self) -> "Page":
+    def new_page(self, *, lifetime: str = "client") -> "Page":
         """Open a blank tab and return its Playwright Page.
 
         In-process: created on the local context with the stealth plugin
@@ -896,9 +896,17 @@ class UCBrowser:
         and the target id is resolved to a local Page on this connection.
         Direct CDP: created on the borrowed context without stealth and owned
         by this client, together with its popups, until close().
+
+        ``lifetime="window"`` (service mode only) makes the page outlive this
+        client: it survives close/revocation/reaping and ends only when
+        explicitly closed or its window ends.
         """
+        if lifetime not in ("client", "window"):
+            raise ValueError(f"lifetime must be 'client' or 'window', not {lifetime!r}")
         client = self._service
         if client is None:
+            if lifetime != "client":
+                raise ValueError("lifetime='window' requires a UC service window")
             page = self._context.new_page()
             if self._cdp_endpoint is not None:
                 self._track_cdp_page(page)
@@ -906,7 +914,10 @@ class UCBrowser:
                 self._stealth_plugin.apply_stealth_sync(page)
             return page
         window = self._service_window
-        target_id = client.new_page(window, client_id=self._client_id)
+        if lifetime == "client":
+            target_id = client.new_page(window, client_id=self._client_id)
+        else:
+            target_id = client.new_page(window, client_id=self._client_id, lifetime=lifetime)
         try:
             return self._targets.resolve(target_id)
         except BaseException:

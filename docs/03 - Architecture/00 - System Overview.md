@@ -56,6 +56,8 @@ With `UCBrowser(cdp_endpoint=url, label=...)`, the caller instead borrows an ext
 
 Native service windows may set `unattached: true`: the service owns the Chrome process but uses only DevTools HTTP for owner/reaper/page operations. An exclusive quiet client opens, reads title/URL and closes pages without any service attachment; site readiness remains consumer logic. Other HTTP operations attach transiently and detach before completion. Registered clients, active workers, unreadable socket state and existing endpoint connections prevent quiet admission. Persistent site sessions cannot use this window type. Direct raw CDP connections made after reservation are outside the guarantee.
 
+Page ownership has an opt-in `window` lifetime in addition to ordinary client leases. It reuses the service-owned page inventory, is visible as `holder: "window"`, and survives client release/revocation/reaping without adding a connection. Explicit close and browser-generation changes end it. Nothing is persisted or restored across restarts. Transfers require a registered client and cannot take another client's or an internal session's page.
+
 ## 5. Registry (`uc_browser/registry.py`)
 
 - **Domain**: which sites UC knows about, operationally (distinct from bench oracles, which never leave `bench/`).
