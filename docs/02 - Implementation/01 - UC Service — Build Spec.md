@@ -1,6 +1,6 @@
 # UC Service — Build Spec
 
-**Status**: CURRENT for tasks 0–6 and the independent UC/Grok user units. Grok profile ownership, NSFW chat/list/read and restart lifecycle are live-verified; the status report distinguishes deployed consumers from pending gateway cutover. Generic/health migration and non-Grok consumer moves remain pending.
+**Status**: CURRENT for tasks 0–6 and the independent UC/Grok user units. Grok profile ownership, NSFW chat/list/read and restart lifecycle are live-verified; both the proxy and event_tool's Grok MCP gateway use the service. Generic/health migration and non-Grok consumer moves remain pending.
 **Date**: 2026-11-24
 **Applies to**: new package `uc_browser/service/`; changes to `uc_browser/browser.py`, `uc_browser/status_server.py`, `uc_browser/sites/`, `uc_browser/llm_providers/uc.py`, `uc_browser/mcp/grok_tools.py`, `pyproject.toml`; consumer changes in `event_tool`
 **Depends on**: `docs/01 - Design/02 - UC as a Local Service.md` (what and why; lifecycle ids E1–E14 and G1–G15 are its §3), `docs/08 - Analysis/00 - Service Prototype Measurements.md` ("row N" is its §3), `docs/02 - Implementation/00 - Setup and Operations.md` (install, extension build, status server)

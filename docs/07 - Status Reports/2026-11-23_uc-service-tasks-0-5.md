@@ -123,7 +123,7 @@ Deployment:
 - Enabled independent user units: UC on loopback 4010; the HTTP-only proxy on loopback 4000, preserving `uc-grok` and `grok-browser`.
 - Profile remains `/home/rabbit/event_tool/data/.grok/.uc_chromium_profile`; no stale state-file cookies are injected. Private windows config is `~/.config/universal-controller/windows.json`; the session map is `~/.local/state/universal-controller/sessions.json`.
 - Native Chrome, its profile, port 9222 and `uc-native-window` were not changed.
-- Gateway MCP consumer pin/environment cutover is being coordinated separately; client implementation tests are not a claim that the running gateway has switched.
+- Gateway MCP cutover is live: event_tool explicitly passes its `EH_UC_SERVICE_URL` configuration to `register_grok_tools`. Its system unit restarted at 2026-11-24 05:47:44 UTC; no further administrator restart was needed.
 
 Observed verification:
 1. Focused session/adapter/client/provider/Grok/core/fetch/health run: **499 passed, 1 skipped, 1 failed**. The failure was a test race releasing a fake blocked read before it observed closure; removing that premature release retained the error assertion, and the targeted case then passed (**1 passed**).
@@ -132,5 +132,6 @@ Observed verification:
 4. One real one-word `Ping` through the proxy's streaming endpoint completed with a nonempty reply. One content chunk was observed; this short reply does not prove multi-chunk live delivery. Grok's actual URL retained the project and chat id; the backend confirmed its `workspaceId` matched NSFW.
 5. Proxy restart preserved both browser PID/CDP endpoint and named session URL.
 6. UC restart removed the previous browser, left the lazy window stopped, and restored the named URL map with `live: false`. A subsequent service read reopened the same signed-in identity, verified project membership, and returned the existing two-message conversation without another prompt. Project listing returned the one test conversation; exactly one process owned the profile.
+7. Through the running event_tool MCP gateway, `list_chat_sessions` returned the shared `uc-migration-smoke` session and `grok_list_conversations` returned the one conversation in the configured NSFW project. Neither check sent another prompt.
 
 No prompt/reply text or cookies are included in these logs. Full-suite, Windows, multi-day idle and real long-generation stop/concurrency are not claimed. Independent stop and concurrency were exercised with deterministic blocked-worker tests.
