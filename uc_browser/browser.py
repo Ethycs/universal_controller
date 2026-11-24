@@ -408,6 +408,9 @@ def _inject_chrome_cookies(context) -> int:
         return 0
 
 
+_UNSET_LAUNCH_ARGUMENT = object()
+
+
 class UCBrowser:
     """High-level browser automation using UC pattern detection + Playwright.
 
@@ -419,17 +422,31 @@ class UCBrowser:
         self,
         mode: Optional[BrowserMode] = None,
         *,
-        channel: str = "chrome",
-        stealth: bool = True,
+        channel: str = _UNSET_LAUNCH_ARGUMENT,
+        stealth: bool = _UNSET_LAUNCH_ARGUMENT,
         timeout_ms: int = 30000,
         # Legacy flags — deprecated, prefer `mode` instead.
         headless: Optional[bool] = None,
         use_extension: Optional[bool] = None,
         native_chrome: Optional[bool] = None,
+        service: Optional[str] = None,
+        window: Optional[str] = None,
         label: Optional[str] = None,
     ):
-        # Resolve mode from explicit param or legacy flags
-        if mode is None:
+        if service is not None:
+            if (mode is not None
+                    or any(x is not None for x in (headless, use_extension, native_chrome))
+                    or channel is not _UNSET_LAUNCH_ARGUMENT
+                    or stealth is not _UNSET_LAUNCH_ARGUMENT):
+                raise ValueError("service and in-process launch arguments are mutually exclusive")
+            if not isinstance(service, str) or not service.strip():
+                raise ValueError("service requires a non-empty URL")
+            if not isinstance(window, str) or not window.strip():
+                raise ValueError("service requires an explicit non-empty window")
+        elif window is not None:
+            raise ValueError("window requires service")
+        # A service attachment has no inferred local launch mode.
+        elif mode is None:
             mode = self._infer_mode_from_legacy_flags(
                 headless, use_extension, native_chrome,
             )
@@ -440,18 +457,19 @@ class UCBrowser:
                 DeprecationWarning, stacklevel=2,
             )
         self.mode = mode
-        self.channel = channel
-        self.use_stealth = stealth
+        self.channel = "chrome" if channel is _UNSET_LAUNCH_ARGUMENT else channel
+        self.use_stealth = True if stealth is _UNSET_LAUNCH_ARGUMENT else stealth
         self.timeout_ms = timeout_ms
         self._pw = None
         self._context = None
         self._browser = None
         self._stealth_plugin = None
         self._chrome_proc = None
-        # Service mode (UC_SERVICE_URL): every one of these stays unset until
-        # start() has actually attached, so an unstarted UCBrowser -- including
-        # the receiver the service itself runs controls on -- is always local.
-        self._label = label if label is not None else (os.environ.get("UC_CLIENT_LABEL") or None)
+        self._service_url = service
+        self._configured_window = window
+        # Attachment state stays unset until start() succeeds. An unstarted
+        # receiver always runs page-taking controls locally.
+        self._label = label
         self._client_id = None
         self._service = None
         self._service_window = None
@@ -509,13 +527,11 @@ class UCBrowser:
         self.close()
 
     def start(self) -> None:
-        """Launch the browser according to self.mode, or -- when
-        ``UC_SERVICE_URL`` is set -- attach to a window of the UC service
-        (register a client, start the window, connect over CDP; nothing is
-        launched and no init script is installed)."""
-        service_url = os.environ.get("UC_SERVICE_URL", "").strip()
-        if service_url:
-            self._start_service(service_url)
+        """Launch in-process, or attach to the explicitly configured service
+        window. Discovery must offer attach before any registration or launch;
+        service mode installs no client-side init scripts."""
+        if self._service_url is not None:
+            self._start_service(self._service_url)
             return
 
         from playwright.sync_api import sync_playwright
@@ -669,21 +685,21 @@ class UCBrowser:
 
     # ── Service mode ────────────────────────────────────────────────────
 
-    def _service_window_name(self) -> str:
-        if self.mode == BrowserMode.NATIVE_CDP:
-            return os.environ.get("UC_NATIVE_WINDOW", "").strip() or "native"
-        return os.environ.get("UC_WINDOW", "").strip() or "default"
-
     def _start_service(self, url: str) -> None:
-        """Register, start the window, attach over CDP. Any failure undoes
-        what already happened (the registration, the connection) and raises."""
+        """Validate the window, then register/start/attach. Any failure after
+        registration undoes the client and local connection before raising."""
         from playwright.sync_api import sync_playwright
 
         from uc_browser.service.client import ServiceClient
         from uc_browser.service.targets import TargetResolver
 
         client = ServiceClient(url)
-        window = self._service_window_name()
+        window = self._configured_window
+        offered = client.windows().get(window)
+        if offered is None:
+            raise ValueError(f"UC service has no window named {window!r}")
+        if "attach" not in offered.get("offers", []):
+            raise ValueError(f"UC service window {window!r} does not offer attach")
         client_id = pw = browser = None
         try:
             client_id = client.register_client(window, self._label)

@@ -60,7 +60,7 @@ UC turns any web chat UI into a callable API: a site-agnostic JS engine detects 
 - **Outputs**: `UCBrowser` (launch modes `CHROME` / `CHROMIUM_EXT` / `NATIVE_CDP` / `HEADLESS`; `chat()` is the full generic round-trip: scored input discovery → ML fallback → framework-aware setText → proximity send-button → trigram-diff response extraction); `sites/grok*.py` (the hand-tuned grok adapter: fast path + conversation CRUD); `sites/generic.py` `GenericClient` (any registry site via `UCBrowser.chat()`, one tab per (site, session) pair for conversation continuity).
 - **Constraints**: sync Playwright is thread-affine — one instance per thread, ever; the Chrome profile is single-writer; one send at a time (locks serialize).
 
-With `UC_SERVICE_URL`, `UCBrowser` registers a pid-bound client, attaches over CDP, creates leased pages through HTTP, and sends page controls to the service. `new_page()` is public in both modes; raw page scripting and interception remain local. Without that variable, existing in-process use remains available; native launch now uses port 0 and held-profile guards.
+With `UCBrowser(service=url, window=name)` (caller names both; no environment fallback), `start()` validates the window via `GET /windows`, then registers a pid-bound client, attaches over CDP, creates leased pages through HTTP, and sends page controls to the service. `new_page()` is public in both modes; raw page scripting and interception remain local. Without `service`, existing in-process use remains available; native launch now uses port 0 and held-profile guards.
 
 ## 5. Registry (`uc_browser/registry.py`)
 

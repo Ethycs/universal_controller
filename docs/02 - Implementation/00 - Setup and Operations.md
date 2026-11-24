@@ -62,7 +62,7 @@ A background scheduler probes each registered site on its interval (default 15 m
 
 `UC_WINDOWS_FILE` selects a windows config; with no file, the service defines one lazy local Chromium/extension window. Build `extension/dist/uc-extension.js` before starting even lazy extension/inject windows: startup refuses a missing bundle. No live profile or service unit is installed by these commands.
 
-Consumers opt in with `UC_SERVICE_URL=http://127.0.0.1:4010` and the configured `UC_WINDOW`; leaving the URL unset retains in-process operation. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Site-session endpoints and consumer migration are not implemented yet.
+Consumers opt in explicitly with `UCBrowser(service="http://127.0.0.1:4010", window="harvest")`; omitting `service` retains in-process operation. `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` and `UC_CLIENT_LABEL` are no longer read, and `ServiceClient(url)` requires an explicit address. Complete configuration, wire routes and disposable live-probe instructions are in `docs/02 - Implementation/01 - UC Service — Build Spec.md`. Site-session endpoints and consumer migration are not implemented yet.
 
 ## 6. litellm proxy
 

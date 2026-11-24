@@ -11,8 +11,8 @@ The design doc decides the shape. This doc is what to type: files, config, the w
 
 1. A Playwright object is touched only from the thread whose Playwright instance produced it. Never from an HTTP handler.
 2. The service binds `127.0.0.1`. So does every browser's debugging port.
-3. The client library never closes a context, never adds a context-level init script, and never launches on a profile the service lists.
-4. With `UC_SERVICE_URL` unset, `UCBrowser` remains in-process. Intentional safety exception: native launch now uses port 0 and refuses held profiles instead of attaching to port 9222.
+3. In service mode the client library never closes a context, adds a context-level init script or launches a browser. An in-process launch refuses a profile already held by a live browser.
+4. Routing is explicit. `UCBrowser(service=url, window=name)` selects a service window; the caller names both and neither side infers. `service` omitted or `None` means in-process, regardless of `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` or `UC_CLIENT_LABEL`, which no longer exist as configuration. Intentional safety exception: native launch now uses port 0 and refuses held profiles instead of attaching to port 9222.
 5. The service never attaches to a browser it did not launch.
 
 ## 1. Layout
@@ -28,7 +28,7 @@ The design doc decides the shape. This doc is what to type: files, config, the w
 | `uc_browser/service/sessions.py` | not implemented (task 6) | planned `Session` and persisted `SessionStore` |
 | `uc_browser/service/api.py` | new | FastAPI router for §3; turns worker futures into responses and streams |
 | `uc_browser/service/client.py` | new | stdlib-only `ServiceClient`; importing it does not load Playwright, including through the package exports. HTTP helpers include future site routes; those routes are not implemented yet |
-| `uc_browser/browser.py` | change | `UCBrowser` service mode (§4); launch paths refuse a served or held profile |
+| `uc_browser/browser.py` | change | explicit `UCBrowser` service mode (§4); in-process launch paths refuse a held profile |
 | `uc_browser/sites/grok.py`, `grok_fast.py`, `generic.py` | unchanged (task 6/8) | planned session-backed adapters; currently retain their existing lifecycle |
 | `uc_browser/llm_providers/uc.py` | unchanged (task 6/8) | provider still owns pinned executors and session maps |
 | `uc_browser/mcp/grok_tools.py` | unchanged (task 6) | planned thin client |
@@ -135,18 +135,25 @@ Existing routes (`/`, `/availability`, `/probe/{name}`, `/healthz`, `/mcp`) are 
 
 ## 4. `UCBrowser` in service mode
 
-Selected by environment, so consumers change configuration and not code.
+Selected by constructor arguments; no environment variable participates. This is a breaking migration (branch `feat/local-service`).
 
-| Variable | Meaning |
+`UCBrowser(service=url, window=name, label=None, timeout_ms=30000)`:
+
+| Argument | Rule |
 |---|---|
-| `UC_SERVICE_URL` | e.g. `http://127.0.0.1:4010`. Unset: today's in-process behaviour (constraint 4) |
-| `UC_WINDOW` | window for a `UCBrowser` that does not ask for native Chrome. Default `default` |
-| `UC_NATIVE_WINDOW` | window for `UCBrowser(native_chrome=True)` / `BrowserMode.NATIVE_CDP`. Default `native` |
-| `UC_CLIENT_LABEL` | default label for clients this process registers. A caller may also pass `UCBrowser(label=...)` |
+| `service` | Service address, e.g. `http://127.0.0.1:4010`. Omitted or `None`: in-process behaviour (constraint 4), whatever the environment holds |
+| `window` | Window name. Required and non-empty when `service` is supplied; supplying `window` without `service` raises `ValueError` |
+| `label` | Optional client label; never derived from the environment |
+| `timeout_ms` | Allowed in both modes |
+| `mode` (non-`None`), `headless`, `use_extension`, `native_chrome` (non-`None`, including `False`), explicitly passed `channel` or `stealth` (even at their default values) | Mixed with `service`: `ValueError` at construction. `channel` and `stealth` use sentinels so local mode keeps its old defaults and explicit local values |
+
+`start()` first does `GET /windows` and checks that the named window exists and offers attach. A missing window or a window without attach raises `ValueError` before registration, service start or Playwright. Only then the sequence below runs. A CDP endpoint missing after start is unexpected: `RuntimeError`, with cleanup.
+
+`ServiceClient(url)` requires an explicit address: a missing argument is `TypeError`, an empty or invalid URL `ValueError`. There is no environment fallback.
 
 | Member | In service mode |
 |---|---|
-| `start()` | `POST /clients` with `os.getpid()`, the label and the window; `POST /windows/{w}/start`; `chromium.connect_over_cdp(cdp)`. Launches nothing and installs no init script |
+| `start()` | `GET /windows` validation, then `POST /clients` with `os.getpid()`, the label and the window; `POST /windows/{w}/start`; `chromium.connect_over_cdp(cdp)`. Launches nothing and installs no init script |
 | `new_page()` | **new public method, in both modes.** Service mode: `POST …/pages`, then resolve the target id to a local `Page` (E4). In-process: `self._context.new_page()` plus the stealth plugin, which is what consumers do by hand today |
 | `_context` | the real `browser.contexts[0]`, unwrapped. A page a consumer makes with `_context.new_page()` works and is stealthed, but is unleased: revocation does not reach it and only the sweep closes it (§5) |
 | `_stealth_plugin` | `None`. The window's context already has stealth (row 19) |
@@ -248,7 +255,7 @@ Before first start on a host that has run the old arrangement, make sure no brow
 | Unit | fetch: `from` defaults to the origin of `url`; one page kept per (window, origin); streamed and unstreamed shapes; `origin_unreachable` | no |
 | Unit | cookies: add by list; `from_chrome` without `rookiepy` answers 501; read without `domain` answers 400 | no |
 | Unit | snapshot: the three formats; `mhtml` on a window that is not Chromium or Chrome answers 409 | no |
-| Unit | `UCBrowser` with `UC_SERVICE_URL` unset constructs and behaves as before (constraint 4) | no |
+| Unit | `UCBrowser` with `service` omitted behaves as before whatever the environment holds; mixed-mode and window-without-service arguments raise `ValueError`; `start` validates `GET /windows` before registering; `ServiceClient` rejects a missing or invalid address (constraint 4) | no |
 | Live | `scripts/service_probe.py`: rows 1–24 of the Analysis doc against the real service | yes |
 | Live | revocation unwinds `page.wait_for_timeout(600000)` after `DELETE /clients?label=…` | verified: `TargetClosedError` in 0.04 s |
 | Live | no-registration cookie-bearing fetch, retained origin page, incremental UTF-8 stream, HTML/PNG/MHTML snapshots | verified against real Chromium; native first-control injection and second-launch `profile_held` also verified |
@@ -265,15 +272,15 @@ One at a time. Each has an observable check; do not start the next until it pass
 |---|---|---|---|
 | 0 | Stop any browser left over from the old arrangement | — | nothing listens on 9222; no Chromium holds a profile named in the config |
 | 1 | Service up with `harvest` only; no consumer changed | — | `GET /windows` lists `harvest` with a `cdp` endpoint; `scripts/service_probe.py` passes |
-| 2 | `event_tool`'s MCP service (the process that runs harvests) gets `UC_SERVICE_URL` and `UC_WINDOW=harvest`; it stops opening a `UCBrowser` for a group that holds only feed and API sources | E0–E6, E8, E9, E11, E12, E14 | a harvest logs no `Loading UC extension` line of its own; `Web sources: N messages from 50 sources` stays in the range of the last runs before the change (912–995 over 2026-11-18…23); after it, `GET /windows` shows `harvest` with no leased pages; a harvest restricted to the eight feed sources registers no client at all |
+| 2 | `event_tool`'s MCP service (the process that runs harvests) passes `service=<url>, window="harvest"` explicitly; it stops opening a `UCBrowser` for a group that holds only feed and API sources | E0–E6, E8, E9, E11, E12, E14 | a harvest logs no `Loading UC extension` line of its own; `Web sources: N messages from 50 sources` stays in the range of the last runs before the change (912–995 over 2026-11-18…23); after it, `GET /windows` shows `harvest` with no leased pages; a harvest restricted to the eight feed sources registers no client at all |
 | 3 | `event_tool`'s job runner labels its `UCBrowser`s with the job id and calls `DELETE /clients?label=<job id>` when a job fails, times out or is cancelled | E10 | force a timeout on a test job: its pages are gone from `GET /windows` within the reaper interval |
-| 4 | `native` window with `engine: inject`; native sources, Cloudflare retries and native explore sessions use it | E7, E11 | a harvest logs no `Launching native Chrome` line of its own; the four native sources still return messages; nothing listens on 9222 |
+| 4 | `native` window with `engine: inject`; `event_tool` routes standard sources to `harvest` and native or retry work to `native`; plain HTTP never opens a browser; Grok future site routes are unchanged. Native sources, Cloudflare retries and native explore sessions use it | E7, E11 | a harvest logs no `Launching native Chrome` line of its own; the four native sources still return messages; nothing listens on 9222 |
 | 5 | Sessions and site routes; the grok adapter in-service on `grok`; the litellm provider and the Grok MCP tools call it | G1–G13 | the proxy's one-word test chat returns the word; `grok_list_conversations` through the MCP gateway returns the signed-in account's chats; a `stop` issued during a long reply returns while the send is still waiting |
 | 6 | `event_tool`'s export script calls `POST /windows/grok/fetch` instead of opening a browser; its and the proxy's separate Grok profiles are removed | G14 | the export runs while the proxy answers a chat, and the script's only import from `uc_browser` is `ServiceClient` |
 | 7 | Cookie import; `event_tool`'s `web login` opens a tab in `harvest` instead of launching Chrome; `event_tool` drops its direct `playwright-stealth` dependency and its one direct `playwright` import | E13, G15 | `grep -rn 'from playwright' src` in `event_tool` prints nothing |
 | 8 | Health probes and the generic client become sessions; provider pinned executors removed | G10 | `grep -rn 'UCBrowser(' uc_browser` shows only the window manager and the client library |
 
-Rollback at any step is unsetting `UC_SERVICE_URL` for that consumer (constraint 4).
+Rollback at any step is the consumer omitting `service` (constraint 4).
 
 ## Verification
 

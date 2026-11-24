@@ -12,6 +12,7 @@
 3. **The service listens on loopback only.**
 4. **A served profile is opened by the service and by nothing else.** One stray `UCBrowser` launch on a served profile brings the lock failures back.
 5. **Every lifecycle in §3 has a pathway.** A change to this design that strands one of those rows is not finished.
+6. **Routing is explicit.** The caller names the window and the offer it uses; neither the library nor the service infers that choice. `UCBrowser(service=url, window=name)` explicitly requests attachment and validates the `attach` offer; HTTP-only callers choose their routes directly. Omitting `service` means in-process, regardless of environment.
 
 ## 0. What is wrong now
 
@@ -300,7 +301,7 @@ The pin belongs to UC: the service's Playwright version determines the Chromium 
 
 1. **UC itself restarts.** Its browsers go with it, so every client's pages die mid-use. Sign-ins survive in profiles; future sessions will rebuild from the map (G3). HTTP connection failures surface as `UCServiceGone`; raw page operations retain Playwright's target-closed errors.
 2. **A window's browser crashes.** The service relaunches that window; other windows are untouched; that window's leases and sessions are void.
-3. **A consumer bypasses the service** and launches on a served profile (constraint 4). The client library must make the service path the default whenever a service is configured, and the launch path must refuse a profile the service lists.
+3. **A consumer bypasses the service** and launches on a served profile (constraint 4). There is no implicit service default: a consumer that wants the service passes `service` and `window`, and the in-process launch path still refuses a profile the service lists (held-profile guard retained).
 4. **A browser the service did not launch already holds a profile**, as the four-day-old Chrome did (Analysis §5). The service must detect a held profile at launch and refuse loudly, not attach to whatever answers.
 5. **A control arrives for a target that just closed**, including one closed by revocation. Return a distinct not-found error.
 6. **Every session worker is busy.** A new session waits or gets `busy`; it must not evict a session that is mid-send.

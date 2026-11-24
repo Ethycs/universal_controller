@@ -165,15 +165,16 @@ class ServiceClient:
 
     def __init__(
         self,
-        url: Optional[str] = None,
+        url: str,
         *,
         timeout: Optional[float] = 30.0,
         control_timeout: Optional[float] = None,
     ):
-        url = url if url is not None else os.environ.get("UC_SERVICE_URL", "")
+        if not isinstance(url, str):
+            raise ValueError("ServiceClient needs an explicit HTTP(S) URL")
         url = url.strip().rstrip("/")
         if not url:
-            raise ValueError("ServiceClient needs a URL or UC_SERVICE_URL")
+            raise ValueError("ServiceClient needs an explicit HTTP(S) URL")
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"UC service URL must be http(s): {url!r}")
         self.url = url

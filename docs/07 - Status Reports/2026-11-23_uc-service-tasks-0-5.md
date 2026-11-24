@@ -89,3 +89,9 @@ DISPLAY=:0 XAUTHORITY=/home/rabbit/.Xauthority pixi run python scripts/service_p
 ```
 
 These use no live profiles. If they disagree with this handoff, resolve the discrepancy before starting task 6. For service-mode probe invocation and disposable-window requirements, use Build Spec §8–Verification.
+
+## 8. 2026-11-24 explicit-routing migration (branch `feat/local-service`)
+
+Breaking change, owner-authorized, in `universal_controller` only. `UCBrowser(service=, window=, label=, timeout_ms=)` replaces environment-based selection; `ServiceClient(url)` requires an address; `start()` validates `GET /windows` first. Docs reconciled: Build Spec constraint 4, §4, §9; Design constraint 6 and §11 item 3; Setup; System Overview; Analysis 01. Consumer migration must pass standard sources to `harvest`, native and retry work to `native`; plain HTTP never uses a browser; Grok future site routes unchanged. No `event_tool` code was changed here.
+
+Verification: `pixi run -e dev pytest -q tests/test_service_client.py` → **77 passed**. A throwaway real HTTP/CDP smoke scenario with fresh Chromium profiles also passed: conflicting legacy environment variables did not override the explicit URL/window/label; missing and non-attach windows failed before any registration or browser launch; explicit page creation, HTML snapshot and release succeeded. Graceful shutdown left the service thread and windows stopped. The smoke script was removed. No live profiles or deployment were used.

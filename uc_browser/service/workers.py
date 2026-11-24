@@ -497,10 +497,7 @@ class Runtime:
         if self._receiver is None:
             from uc_browser.browser import BrowserMode, UCBrowser
 
-            receiver = UCBrowser(mode=BrowserMode.CHROMIUM_EXT)
-            # Explicitly local whatever UC_SERVICE_URL says in this process.
-            receiver._service = None
-            self._receiver = receiver
+            self._receiver = UCBrowser(mode=BrowserMode.CHROMIUM_EXT)
         return self._receiver
 
     def stop_playwright(self) -> None:

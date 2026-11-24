@@ -30,7 +30,7 @@ Measured, and safe to build on (Analysis §3): one process can launch windows wi
 1. **There is no single access technique.** The service owns the identity (a profile one process may hold) and offers each technique separately. No route may require another: fetch, cookies, snapshot and sessions must work for a caller that never registered or attached (Design §1, constraint 2; Build Spec §3 rule 7).
 2. **One sync Playwright instance per thread.** No Playwright object is touched from an HTTP handler. Each service thread that touches a browser is a driver process of about 80 MB (row 24).
 3. **The service never attaches to a browser it did not launch.** It answers `profile_held`. A second Chrome on a held profile exits at once and the first one answers the port; that is how four days of harvests attached to an abandoned browser (Analysis §5).
-4. **`UC_SERVICE_URL` unset means `UCBrowser` behaves exactly as today.** That is the rollback for every consumer.
+4. **`UC_SERVICE_URL` unset means `UCBrowser` behaves exactly as today.** That is the rollback for every consumer. *Superseded 2026-11-24:* routing is explicit (`UCBrowser(service=, window=)`); the variables are no longer read. See Build Spec §4.
 5. **Within a window, init scripts and cookies reach every client; across windows nothing crosses** (rows 8–10). The client library must never call `add_init_script` on an attached context or close a context.
 6. **A service-opened page is not on the client's connection when the call returns.** Resolve by target id with a wait; 0.16–0.17 s measured (row 6).
 7. **UC's pixi workspace lists `win-64` only** (`pyproject.toml`, `[tool.pixi.workspace]`). Add `linux-64` and re-solve `pixi.lock` first. Whether it solves is `unverified`.

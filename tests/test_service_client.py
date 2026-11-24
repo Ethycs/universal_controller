@@ -122,6 +122,10 @@ class FakeService:
         self.routes.insert(0, (method, re.compile(pattern), handler))
 
     def install_uc_routes(self):
+        self.windows = {
+            name: {"offers": ["attach", "control"]} for name in ("default", "harvest", "nat")
+        }
+        self.route("GET", "/windows", lambda m, b, q: (200, self.windows))
         self.route("POST", "/clients", lambda m, b, q: (200, {"client_id": "c1"}))
         self.route("POST", r"/windows/[^/]+/start", lambda m, b, q: (
             200, {"cdp": "ws://127.0.0.1:1/devtools/browser/x", "offers": ["attach", "control"]},
@@ -317,17 +321,20 @@ def rig(monkeypatch, svc):
     browser = FakeBrowser(ctx)
     pw = FakePw(browser, ctx)
     monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakeStarter(pw))
-    for name in ("UC_WINDOW", "UC_NATIVE_WINDOW", "UC_CLIENT_LABEL"):
+    for name in ("UC_SERVICE_URL", "UC_WINDOW", "UC_NATIVE_WINDOW", "UC_CLIENT_LABEL"):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("UC_SERVICE_URL", svc.url)
-    return SimpleNamespace(svc=svc, ctx=ctx, browser=browser, pw=pw)
+
+    def new(window="default", **kwargs):
+        return UCBrowser(service=svc.url, window=window, **kwargs)
+
+    return SimpleNamespace(svc=svc, ctx=ctx, browser=browser, pw=pw, new=new)
 
 
 @pytest.fixture
 def started(rig):
     """A UCBrowser attached to window ``default`` with page ``T1`` visible."""
     page = rig.ctx.add_page("T1")
-    uc = UCBrowser(stealth=False)
+    uc = rig.new()
     uc.start()
     rig.page = page
     rig.uc = uc
@@ -367,14 +374,14 @@ def test_lazy_exports_resolve():
 # ── ServiceClient ────────────────────────────────────────────────────────
 
 
-def test_client_needs_http_url(monkeypatch):
-    monkeypatch.delenv("UC_SERVICE_URL", raising=False)
-    with pytest.raises(ValueError):
-        ServiceClient()
-    with pytest.raises(ValueError):
-        ServiceClient("file:///etc/passwd")
+def test_client_requires_an_explicit_http_url(monkeypatch):
     monkeypatch.setenv("UC_SERVICE_URL", "http://127.0.0.1:9/")
-    assert ServiceClient().url == "http://127.0.0.1:9"
+    with pytest.raises(TypeError):
+        ServiceClient()          # no environment fallback
+    for bad in ("", "file:///etc/passwd", "127.0.0.1:9"):
+        with pytest.raises(ValueError):
+            ServiceClient(bad)
+    assert ServiceClient("http://127.0.0.1:9/").url == "http://127.0.0.1:9"
 
 
 def test_identifiers_are_escaped_in_path_and_query(svc):
@@ -657,10 +664,10 @@ def test_control_names_and_signatures_survive_wrapping():
         assert name not in CONTROL_NAMES
 
 
-def test_label_and_client_id_are_read_only(monkeypatch):
+def test_label_and_client_id_are_read_only(monkeypatch, svc):
     monkeypatch.setenv("UC_CLIENT_LABEL", "from-env")
-    assert UCBrowser().label == "from-env"
-    assert UCBrowser(label="mine").label == "mine"
+    assert UCBrowser().label is None          # never environment-derived
+    assert UCBrowser(service=svc.url, window="default", label="mine").label == "mine"
     uc = UCBrowser()
     assert uc.client_id is None
     with pytest.raises(AttributeError):
@@ -669,18 +676,60 @@ def test_label_and_client_id_are_read_only(monkeypatch):
         uc.client_id = "x"
 
 
+def test_window_and_service_must_be_supplied_together(svc):
+    with pytest.raises(ValueError):
+        UCBrowser(window="default")
+    for window in ("", None):
+        with pytest.raises(ValueError):
+            UCBrowser(service=svc.url, window=window)
+    with pytest.raises(ValueError):
+        UCBrowser(service=svc.url)
+    assert svc.calls == []
+
+
+@pytest.mark.parametrize("extra", [
+    {"mode": BrowserMode.HEADLESS},
+    {"headless": False},
+    {"headless": True},
+    {"use_extension": False},
+    {"native_chrome": False},
+    {"native_chrome": True},
+    {"channel": "chrome"},
+    {"stealth": True},
+    {"stealth": False},
+])
+def test_service_with_local_launch_arguments_is_rejected(svc, extra):
+    with pytest.raises(ValueError):
+        UCBrowser(service=svc.url, window="default", **extra)
+    assert svc.calls == []
+
+
+def test_legacy_environment_does_not_select_service_window_or_label(svc, monkeypatch, tmp_path):
+    ctx, pw = _standalone(monkeypatch, tmp_path)
+    monkeypatch.setenv("UC_SERVICE_URL", svc.url)
+    monkeypatch.setenv("UC_WINDOW", "harvest")
+    monkeypatch.setenv("UC_NATIVE_WINDOW", "nat")
+    monkeypatch.setenv("UC_CLIENT_LABEL", "env-label")
+    uc = UCBrowser(mode=BrowserMode.CHROMIUM_EXT, stealth=False)
+    assert uc.label is None
+    uc.start()
+    assert uc._service is None and uc.client_id is None
+    assert svc.calls == []
+    assert len(ctx.init_scripts) == 1
+    uc.close()
+
+
 # ── UCBrowser: service-mode lifecycle ────────────────────────────────────
 
 
-def test_start_registers_starts_and_attaches_without_touching_the_context(rig, monkeypatch):
-    monkeypatch.setenv("UC_CLIENT_LABEL", "job-9")
-    uc = UCBrowser()
+def test_start_registers_starts_and_attaches_without_touching_the_context(rig):
+    uc = rig.new(label="job-9")
     assert uc._service is None
     uc.start()
     assert [(c.method, c.path) for c in rig.svc.calls] == [
-        ("POST", "/clients"), ("POST", "/windows/default/start"),
+        ("GET", "/windows"), ("POST", "/clients"), ("POST", "/windows/default/start"),
     ]
-    assert rig.svc.calls[0].body == {"pid": os.getpid(), "window": "default", "label": "job-9"}
+    assert rig.svc.calls[1].body == {"pid": os.getpid(), "window": "default", "label": "job-9"}
     assert rig.pw.chromium.cdp_urls == ["ws://127.0.0.1:1/devtools/browser/x"]
     assert uc.client_id == "c1" and uc.label == "job-9"
     assert uc._context is rig.ctx and uc._browser is rig.browser
@@ -689,17 +738,27 @@ def test_start_registers_starts_and_attaches_without_touching_the_context(rig, m
     uc.close()
 
 
-def test_window_names_follow_the_environment(rig, monkeypatch):
-    monkeypatch.setenv("UC_WINDOW", "harvest")
-    monkeypatch.setenv("UC_NATIVE_WINDOW", "nat")
-    for mode, window in ((BrowserMode.CHROMIUM_EXT, "harvest"), (BrowserMode.HEADLESS, "harvest"),
-                         (BrowserMode.NATIVE_CDP, "nat")):
-        rig.svc.calls.clear()
-        uc = UCBrowser(mode=mode)
+@pytest.mark.parametrize("window", ["harvest", "nat"])
+def test_explicit_window_names_are_used(rig, window):
+    uc = rig.new(window=window)
+    uc.start()
+    assert rig.svc.calls[1].body["window"] == window
+    assert rig.svc.calls[2].path == f"/windows/{window}/start"
+    uc.close()
+
+
+@pytest.mark.parametrize("offers", [None, ["fetch", "control"]])
+def test_missing_window_or_attach_offer_fails_before_registration(rig, offers):
+    if offers is None:
+        rig.svc.windows.pop("default")
+    else:
+        rig.svc.windows["default"]["offers"] = offers
+    uc = rig.new()
+    with pytest.raises(ValueError):
         uc.start()
-        assert rig.svc.calls[0].body["window"] == window
-        assert rig.svc.calls[1].path == f"/windows/{window}/start"
-        uc.close()
+    assert [(c.method, c.path) for c in rig.svc.calls] == [("GET", "/windows")]
+    assert not rig.pw.started
+    assert uc._service is None and uc.client_id is None
 
 
 def test_close_releases_the_client_and_only_disconnects(started):
@@ -716,7 +775,7 @@ def test_start_failure_in_the_window_start_releases_the_registration(rig):
     rig.svc.override("POST", r"/windows/[^/]+/start", lambda m, b, q: (
         500, {"error": "launch_failed", "detail": "boom"},
     ))
-    uc = UCBrowser()
+    uc = rig.new()
     with pytest.raises(ServiceError) as info:
         uc.start()
     assert info.value.code == "launch_failed"
@@ -727,7 +786,7 @@ def test_start_failure_in_the_window_start_releases_the_registration(rig):
 
 def test_attach_failure_releases_registration_and_stops_playwright(rig):
     rig.pw.chromium.connect_error = PlaywrightError("connection refused")
-    uc = UCBrowser()
+    uc = rig.new()
     with pytest.raises(PlaywrightError):
         uc.start()
     assert ("DELETE", "/clients/c1") in [(c.method, c.path) for c in rig.svc.calls]
@@ -739,20 +798,19 @@ def test_window_without_cdp_cannot_be_attached(rig):
     rig.svc.override("POST", r"/windows/[^/]+/start", lambda m, b, q: (
         200, {"cdp": None, "offers": ["fetch"]},
     ))
-    uc = UCBrowser()
+    uc = rig.new()
     with pytest.raises(RuntimeError, match="no CDP"):
         uc.start()
     assert ("DELETE", "/clients/c1") in [(c.method, c.path) for c in rig.svc.calls]
     assert not rig.pw.started
 
 
-def test_service_gone_on_start_is_raised(monkeypatch):
+def test_service_gone_on_start_is_raised():
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     sock.close()
-    monkeypatch.setenv("UC_SERVICE_URL", f"http://127.0.0.1:{port}")
-    uc = UCBrowser()
+    uc = UCBrowser(service=f"http://127.0.0.1:{port}", window="default")
     with pytest.raises(UCServiceGone):
         uc.start()
     assert uc._service is None
@@ -773,7 +831,7 @@ def test_new_page_in_service_mode_posts_then_resolves_the_target(started):
 def test_new_page_waits_for_propagation_to_this_connection(rig):
     rig.ctx.add_page("A")
     late = rig.ctx.add_page("T1", visible=False)
-    uc = UCBrowser()
+    uc = rig.new()
     uc.start()
     assert uc.new_page() is late
     uc.close()
@@ -867,7 +925,7 @@ def test_bad_arguments_raise_the_same_type_error_as_a_local_call(started):
     assert started.svc.control_names() == []
 
 
-def test_unstarted_receiver_never_dispatches_even_with_the_environment_set(rig):
+def test_unstarted_receiver_never_dispatches(rig):
     page = rig.ctx.add_page("T1")
     receiver = UCBrowser()
     assert receiver.get_patterns(page) == {}   # local body: evaluate("window.__UC") -> None
@@ -887,7 +945,7 @@ def test_wire_errors_surface(started):
 
 
 def test_closed_page_keeps_the_raw_playwright_error(rig):
-    uc = UCBrowser()
+    uc = rig.new()
     uc.start()
     page = rig.ctx.add_page("T1")
     page.closed = True
@@ -917,7 +975,7 @@ def test_window_without_control_offer_uses_live_page_without_posting(rig):
     ))
     page = rig.ctx.add_page("T1")
     page.text = "text from the caller's page, not a service default"
-    with UCBrowser(stealth=False) as uc:
+    with rig.new() as uc:
         assert uc.get_feed_text(page) == page.text
         assert uc.detect_all(page) == {}
         assert rig.svc.control_names() == []
