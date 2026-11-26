@@ -28,12 +28,11 @@ Run:
   pixi run -e dev python -m uc_browser.status_server --run-scheduler
   UC_STATUS_PORT=4011 pixi run -e dev python -m uc_browser.status_server
 
-The litellm proxy forwards /uc/availability to this server (see
-pass_through_endpoints in litellm.config.yaml), so API clients get the
-live menu from the same base URL they call for completions. Point an MCP
-client at http://127.0.0.1:4010/mcp for the site tools; to expose it
-remotely, front it with ngrok the same way scripts/serve_mcp_remote.py
-does for the Grok tools.
+Loopback is always retained. Add --listen-address <IPv4> for each explicitly
+trusted interface; this exposes the full API without adding authentication.
+Wildcard addresses are rejected, and all sockets must bind before app startup.
+Browser debugging endpoints remain loopback-only. The separate Grok proxy
+does not forward /availability; /healthz reports server liveness, not sign-in.
 """
 
 from __future__ import annotations
@@ -47,6 +46,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
+from uc_browser.listeners import add_listener_argument, serve
 from uc_browser.health import HealthMonitor, HealthStore, availability_snapshot
 from uc_browser.registry import SiteRegistry, get_registry
 
@@ -303,6 +303,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         prog="python -m uc_browser.status_server",
         description="UC local service: status page, availability API, "
                     "window/control plane and MCP endpoint.")
+    add_listener_argument(parser)
     parser.add_argument(
         "--run-scheduler", action="store_true", default=False,
         help="run the background health scheduler, which opens browser "
@@ -313,12 +314,11 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
-    import uvicorn
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s %(name)s %(message)s")
     port = int(os.environ.get("UC_STATUS_PORT", "4010"))
-    uvicorn.run(create_app(run_scheduler=args.run_scheduler),
-                host="127.0.0.1", port=port, log_level="info")
+    serve(lambda: create_app(run_scheduler=args.run_scheduler),
+          port=port, addresses=args.listen_address)
 
 
 if __name__ == "__main__":

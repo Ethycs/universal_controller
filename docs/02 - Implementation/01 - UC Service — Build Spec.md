@@ -10,7 +10,7 @@ The design doc decides the shape. This doc is what to type: files, config, the w
 ## Hard constraints (non-negotiable)
 
 1. A Playwright object is touched only from the thread whose Playwright instance produced it. Never from an HTTP handler.
-2. The service binds `127.0.0.1`. So does every browser's debugging port.
+2. The service always binds `127.0.0.1`; repeatable `--listen-address <IPv4>` adds specific trusted interfaces without authentication. No wildcard or implicit network exposure. All configured sockets must bind before the single app starts; any failure releases earlier sockets and aborts startup. Every browser's debugging port remains loopback-only.
 3. In service mode the client library never closes a context, adds a context-level init script or launches a browser. An in-process launch refuses a profile already held by a live browser.
 4. Routing is explicit. `UCBrowser(service=url, window=name)` selects a service window; the caller names both and neither side infers. `service` omitted or `None` means in-process, regardless of `UC_SERVICE_URL`, `UC_WINDOW`, `UC_NATIVE_WINDOW` or `UC_CLIENT_LABEL`, which no longer exist as configuration. Intentional safety exception: native launch uses a dynamically selected explicit loopback port and refuses held profiles instead of attaching to fixed port 9222.
 5. The service never attaches to a browser it did not launch.
@@ -279,6 +279,10 @@ Health scheduling is **off by default**, both in the module entrypoint and `crea
 Linux user-unit templates are versioned in `systemd/uc-service.service` and `systemd/uc-grok-proxy.service`. Install them in `~/.config/systemd/user/` after stopping the previous profile owner; run `systemctl --user daemon-reload`, then enable/start them. Setup §6 records the profile handoff and private config/state paths.
 
 Both run from the independent checkout and pixi environment. The UC unit owns the headed browser and binds 4010; the Grok-only proxy binds 4000 and uses `grok-proxy.config.yaml`, with `UC_GROK_SERVICE_URL=http://127.0.0.1:4010`. Proxy restart must not close the service browser. UC restart closes its process group; the profile retains sign-in and the URL map reconstructs named sessions lazily. The proxy has a `Wants`/ordering dependency, not a stop-propagating dependency on UC.
+
+Both entrypoints use `uc_browser.listeners` to retain loopback and optionally bind explicit additional IPv4 addresses on the same port, in one process with one app lifespan. The service is `python -m uc_browser.status_server`; the Grok-only LiteLLM app is `python -m uc_browser.grok_proxy --config grok-proxy.config.yaml --port 4000`. Neither adds a forwarding layer. Unit templates default to loopback. Deployments may append `--listen-address 10.158.218.150` on this host; there is no wildcard, alternate-port fallback or partial startup if an address is missing/busy. An unavailable configured interface therefore prevents startup until it returns or configuration changes. The two already-bound listeners are independent during a later connectivity outage.
+
+On 2026-11-26 the owner explicitly approved both APIs on ZeroTier without a key or front. Every reachable ZeroTier peer is trusted with the full API, including account sends, cookie export and destructive operations. No request authorization is implied by binding an interface. Remote clients use HTTP routes; the listed loopback CDP endpoints remain local-only. `/healthz` (4010) and `/health/liveliness` (4000) are process liveness checks, not browser/sign-in readiness.
 
 Before first start on a host that has run the old arrangement, make sure no browser from it still holds a served profile; the service will refuse with `profile_held` if one does.
 

@@ -75,10 +75,10 @@ Page ownership has an opt-in `window` lifetime in addition to ordinary client le
 
 ## 7. Status server (`uc_browser/status_server.py`)
 
-- **Domain**: one loopback uvicorn process presenting registry × health and owning configured browser windows.
+- **Domain**: one uvicorn process presenting registry × health and owning configured browser windows, with loopback always retained and optional explicit additional HTTP interfaces.
 - **Inputs**: registry/health store, opt-in `--run-scheduler` (or `create_app(run_scheduler=True)`), `UC_WINDOWS_FILE` (default `data/windows.json`). Both service entrypoints default to no automatic probes; manual probe routes remain available.
 - **Outputs**: status/availability/probe/MCP routes, `/windows`, `/clients`, pages, controls, cookies, fetch, snapshots, and Grok `/sites/{site}` operations/session lifecycle.
-- **Constraints**: `127.0.0.1:4010` (`UC_STATUS_PORT` overrides); the litellm proxy pass-through depends on it. Native Chrome and Chromium each use their own profile and loopback CDP port. Native uses an explicitly selected port with launched-process endpoint proof; Playwright Chromium keeps browser-selected port 0 and its existing stealth setup.
+- **Constraints**: `127.0.0.1:4010` (`UC_STATUS_PORT` overrides), plus repeatable `--listen-address <IPv4>`. Shared `listeners.py` binds every required socket before the single app starts; no wildcard, partial startup, alternate-port fallback or added authentication. `grok_proxy.py` runs LiteLLM's own ASGI app/lifespan with the same policy on port 4000, not through a forwarding layer. Native Chrome and Chromium retain their own profiles and loopback-only CDP ports; HTTP exposure does not make remote CDP attachment available. Native uses an explicitly selected port with launched-process endpoint proof; Playwright Chromium keeps browser-selected port 0 and its existing stealth setup.
 
 ### Service substrate (`uc_browser/service/`)
 

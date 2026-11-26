@@ -101,7 +101,7 @@ This lasts only until explicit close or the current browser/window ends: no conf
 
 ## 6. Grok proxy and service deployment
 
-`systemd/uc-service.service` and `systemd/uc-grok-proxy.service` are Linux user-unit templates for an independent checkout at `~/universal_controller`. The service alone owns the signed-in browser; the Grok-only proxy uses `grok-proxy.config.yaml`, exposing the existing `uc-grok` and `grok-browser` model names on loopback port 4000.
+`systemd/uc-service.service` and `systemd/uc-grok-proxy.service` are Linux user-unit templates for an independent checkout at `~/universal_controller`. The service alone owns the signed-in browser; the Grok-only proxy uses `grok-proxy.config.yaml`, exposing the existing `uc-grok` and `grok-browser` model names on port 4000. Both default to loopback and can additionally bind explicitly named IPv4 interfaces; neither needs MCP or a forwarding proxy for Grok HTTP calls.
 
 Host-specific configuration belongs in private `~/.config/universal-controller/windows.json`; the session map belongs in `~/.local/state/universal-controller/sessions.json`. Configure a `grok` window and site, with the intended `folder` and verified `folder_url`. The current migration uses the existing `NSFW` project and keeps the Grok profile at its existing path. Do not copy stale state-file cookies over a profile whose account/session has just changed.
 
@@ -110,13 +110,25 @@ Before first cutover, stop the old `uc-grok-proxy` browser owner, confirm its pr
 ```bash
 # By hand, after the service owns the configured Grok profile:
 UC_GROK_SERVICE_URL=http://127.0.0.1:4010 \
-  pixi run --frozen litellm --config grok-proxy.config.yaml \
-  --host 127.0.0.1 --port 4000 --num_workers 1
+  pixi run --frozen python -m uc_browser.grok_proxy \
+  --config grok-proxy.config.yaml --port 4000
 ```
 
 `UC_GROK_SERVICE_URL` is consumer configuration, passed explicitly to `ServiceClient`; it does not select a `UCBrowser` mode. The provider and Grok MCP tools fail with a configuration error when it is absent, rather than opening a private browser. MCP hosts must use the same deployed client revision and set this address too. Named sessions are shared through the service; restarting a consumer does not close its browser or discard that map.
 
 The older `litellm.config.yaml` remains a mixed-site development example. Its generic non-Grok clients still own local browsers and require one worker; that task-8 migration is separate. No generic models are added to the production Grok-only proxy by this cutover.
+
+### 6.1 Explicit trusted-network listeners
+
+For this host's approved ZeroTier deployment, append `--listen-address 10.158.218.150` to **each** unit's `ExecStart`. The service keeps `127.0.0.1:4010`; the proxy keeps `127.0.0.1:4000`. Remote addresses are `http://smallblackbox.zt:4010` and `http://smallblackbox.zt:4000/v1`. Existing local consumer/upstream URLs do not change.
+
+`--listen-address` is repeatable and accepts only specific IPv4 literals. Loopback cannot be removed; wildcard/multicast addresses are rejected. One app instance serves all sockets. Every configured address must bind before app startup: a missing interface or occupied port aborts startup and releases earlier sockets, rather than silently serving only one interface or selecting another port. Ensure ZeroTier is available before restarting; `Restart=on-failure` retries startup.
+
+**Trust boundary:** the owner approved no key and no front for both listeners. Any peer able to reach the ZeroTier address can use the APIs; UC 4010 includes browser controls, cookies and deletion, not just Grok. Do not substitute `0.0.0.0`. CDP stays on loopback and is not made remotely attachable by this change.
+
+Before restart, coordinate with consumers and confirm no browser work or queued Grok send. Restarting UC closes its browser windows and window-lifetime tabs; profiles and the named-session URL map survive. Restarting only the Grok proxy leaves UC's browsers alone but interrupts any proxy request. Never start a second owner of either profile.
+
+Verify both addresses with `/healthz` on 4010 and `/health/liveliness` plus `/v1/models` on 4000. These open no page and send no prompt; they prove liveness/configuration, not Grok sign-in or response quality. Listener regression checks: `pixi run --frozen -e dev pytest -q tests/test_listeners.py tests/test_health.py`.
 
 ## 7. Demo pipeline
 

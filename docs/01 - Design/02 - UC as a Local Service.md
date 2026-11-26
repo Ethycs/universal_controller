@@ -9,7 +9,7 @@
 
 1. **One sync Playwright instance per thread; one writer per browser profile** (System Overview, axiom 4). The design exists because of the second half and must never violate the first.
 2. **No technique is privileged, and no consumer is made to change technique.** UC and its consumers reach sites by a composite of techniques (§1.1). The service must offer every one that needs a shared browser, stay out of the way of every one that needs none, and make no single one the price of entry. In particular `event_tool` drives raw Playwright pages in about twenty modules and must go on holding real `Page` objects.
-3. **The service listens on loopback only.**
+3. **Loopback is always retained; additional HTTP interfaces are explicit.** The default is loopback only. The owner approved binding specific ZeroTier addresses without authentication on 2026-11-26: network membership is the trust boundary for the entire API, not just Grok. Wildcard listeners are forbidden. Browser debugging ports remain loopback-only; exposing HTTP does not enable remote CDP attachment.
 4. **A served profile is opened by the service and by nothing else.** One stray `UCBrowser` launch on a served profile brings the lock failures back.
 5. **Every lifecycle in §3 has a pathway.** A change to this design that strands one of those rows is not finished.
 6. **Routing is explicit.** The caller names the window and offer; neither library nor service infers them. `UCBrowser(service=url, window=name)` requests service attachment; HTTP-only callers choose their routes. `cdp_endpoint` explicitly borrows an external browser. Omitting both means local launching, regardless of environment.

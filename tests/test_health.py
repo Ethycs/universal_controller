@@ -342,8 +342,7 @@ def test_create_app_opt_in_schedules_probes(tmp_path, monkeypatch):
 @pytest.mark.parametrize("argv,expect_probes", [([], False),
                                                 (["--run-scheduler"], True)])
 def test_main_flag_controls_scheduler(tmp_path, monkeypatch, argv, expect_probes):
-    """Drive the real main(): it builds the app, uvicorn.run (stubbed) boots
-    its real lifespan, and we observe whether probes get scheduled."""
+    """Drive main's real app lifespan and observe scheduler behavior."""
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     import uvicorn
     from uc_browser import status_server
@@ -357,16 +356,14 @@ def test_main_flag_controls_scheduler(tmp_path, monkeypatch, argv, expect_probes
             with_mcp=False, window_manager=_NoWindows()))
     served = {}
 
-    def fake_run(app, host, port, log_level):
-        served.update(host=host, port=port)
-        with fastapi_testclient.TestClient(app) as c:
+    def fake_run(server, sockets):
+        with fastapi_testclient.TestClient(server.config.app()) as c:
             assert c.get("/healthz").status_code == 200
             served["swept"] = swept.wait(10) if expect_probes else bool(considered)
 
-    monkeypatch.setattr(uvicorn, "run", fake_run)
-    monkeypatch.setenv("UC_STATUS_PORT", "4999")
+    monkeypatch.setattr(uvicorn.Server, "run", fake_run)
+    monkeypatch.setenv("UC_STATUS_PORT", "0")
     status_server.main(argv)
-    assert served["host"] == "127.0.0.1" and served["port"] == 4999
     assert served["swept"] is expect_probes
     assert bool(probed) is expect_probes
 

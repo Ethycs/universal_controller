@@ -205,3 +205,13 @@ Consumer activation and live replacement verification **passed**, reported by PB
 No unexpected busy response, leased-page leak or lifetime warning was reported. This proves optional retention and consumer replacement, **not** longer-lived clearance. Whether keeping the tab open extends the site's clearance is unverified; the next scheduled harvest is the first observation. Do not restart the service/native window merely to recheck it: restart intentionally ends this retained tab.
 
 Retained tabs are still attached whenever any Playwright client/worker is connected to that window; retention alone does not attach. No network exposure, Grok prompt, automatic mapping/focus or restart-restoration feature was added.
+
+## 14. 2026-11-26 explicit ZeroTier listeners
+
+The owner explicitly authorized the **full UC API** on loopback plus `10.158.218.150:4010`, without authentication or a front, then requested the Grok proxy on ZeroTier too. Both retain local callers unchanged; the network boundary trusts every reachable ZeroTier peer. No wildcard/LAN bind, Grok prompt, conversation cleanup or reliability-contract change is included.
+
+Added a shared all-or-fail socket runner and a Grok proxy entrypoint that runs LiteLLM's real ASGI app directly. One app serves loopback and selected additional IPv4 addresses. Unit templates remain loopback by default; private deployment units opt in. Missing/busy addresses abort startup before browser ownership begins.
+
+Verification: **28 passed in 4.23 s** (`tests/test_listeners.py`, `tests/test_health.py`). A real proxy process on disposable ports served liveness and both configured model names through `127.0.0.1` and `127.0.0.2`; an unselected `127.0.0.3` connection was refused. Its UC upstream was deliberately unreachable, and no account request was sent.
+
+PBX 210-1001 gave a safe-restart signal at 00:01:49 UTC: no jobs, native clients or live Grok session. The retained erobay tab was still present after 29 h 5 min. Its 2026-11-25 nightly quiet page had nevertheless returned to a check after 11 h 16 min: retention worked but did not preserve clearance in that observation. Restart ends the retained tab by design. Production listener deployment and remote liveness verification are pending.
